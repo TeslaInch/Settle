@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -87,14 +87,27 @@ class AgreementResponse(BaseModel):
     title: str
     amount: float
     terms: str
+    status: str
     initiator_id: str
+    initiator_phone: Optional[str] = None
+    initiator_name: Optional[str] = None
     counterparty_id: Optional[str] = None
     counterparty_phone: str
+    counterparty_name: Optional[str] = None
     repayment_date: datetime
-    status: str
     seal_hash: Optional[str] = None
+    seal_payload: Optional[Any] = None
     sealed_at: Optional[datetime] = None
     created_at: datetime
+
+
+class ConfirmRequest(BaseModel):
+    confirmation_token: str = Field(..., min_length=1)
+
+
+class ConfirmResponse(BaseModel):
+    message: str
+    agreement: AgreementResponse
 
 
 class AgreementConfirmRequest(BaseModel):

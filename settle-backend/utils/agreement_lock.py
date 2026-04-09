@@ -1,19 +1,35 @@
-import asyncio
-from typing import Dict
-
-# In-memory lock for agreements
-# In production, use Redis or similar for distributed locking
-agreement_locks: Dict[str, asyncio.Lock] = {}
+import hashlib
+import json
+from datetime import datetime, timezone
 
 
-def get_agreement_lock(agreement_id: str) -> asyncio.Lock:
-    """Get or create a lock for an agreement."""
-    if agreement_id not in agreement_locks:
-        agreement_locks[agreement_id] = asyncio.Lock()
-    return agreement_locks[agreement_id]
+def seal_agreement(
+    agreement: dict,
+    initiator_phone: str,
+    counterparty_phone: str,
+) -> dict:
+    """
+    Pure function — builds a deterministic seal payload and SHA256 hash.
+    Same inputs always produce the same hash.
 
+    Returns:
+        {
+            "seal_payload": dict,   # the canonical payload that was hashed
+            "seal_hash":    str,    # hex SHA256 of the JSON-serialised payload
+        }
+    """
+    payload = {
+        "title":              agreement["title"],
+        "amount":             str(agreement["amount"]),   # str for float stability
+        "terms":              agreement["terms"],
+        "repayment_date":     str(agreement["repayment_date"]),
+        "initiator_phone":    initiator_phone,
+        "counterparty_phone": counterparty_phone,
+        "sealed_at":          datetime.now(timezone.utc).isoformat(),
+    }
 
-async def release_agreement_lock(agreement_id: str) -> None:
-    """Release the lock for an agreement."""
-    if agreement_id in agreement_locks:
-        del agreement_locks[agreement_id]
+    # Deterministic serialisation — sorted keys, no extra whitespace
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    seal_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    return {"seal_payload": payload, "seal_hash": seal_hash}
