@@ -41,7 +41,13 @@ export function getGreeting(name: string): string {
   return `Good evening, ${name}`;
 }
 
+//function for exporting first name.
+
 export function getFirstName(fullName: string | null | undefined): string {
   if (!fullName) return "there";
   return fullName.trim().split(" ")[0];
 }
+
+//utils file before later updates 
+
+
