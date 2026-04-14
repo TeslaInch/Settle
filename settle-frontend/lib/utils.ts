@@ -51,3 +51,9 @@ export function getFirstName(fullName: string | null | undefined): string {
 //utils file before later updates 
 
 
+
+export function markFirstAgreementCreated(): void {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("settle_has_agreement", "1");
+  }
+}

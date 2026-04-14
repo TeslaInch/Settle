@@ -14,7 +14,8 @@
     "react-dom": "^18",
     "clsx": "^2.1.1",
     "tailwind-merge": "^2.3.0",
-    "lucide-react": "^0.378.0"
+    "lucide-react": "^0.378.0",
+    "next-pwa": "^5.6.0"
   },
   "devDependencies": {
     "@types/node": "^20",
