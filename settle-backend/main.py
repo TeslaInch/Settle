@@ -25,7 +25,8 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(agreements.router, prefix="/api/v1/agreements", tags=["agreements"])
-app.include_router(payments.router, prefix="/api/v1/payments", tags=["payments"])
+# Payment routes live under both /agreements/{id}/payments and /payments/{id}/confirm
+app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 
 

@@ -1,22 +1,32 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { sendOTP } from "@/lib/api";
+import { validateNigerianPhone } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sessionMsg, setSessionMsg] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("reason") === "session_expired") {
+      setSessionMsg("Your session expired. Please log in again.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
 
     const trimmed = phone.trim();
-    if (!trimmed) {
-      setError("Please enter your phone number.");
+    const phoneErr = validateNigerianPhone(trimmed);
+    if (phoneErr) {
+      setError(phoneErr);
       return;
     }
 
@@ -24,16 +34,19 @@ export default function LoginPage() {
     const res = await sendOTP(trimmed);
     setLoading(false);
 
+    if (res.status === 0) {
+      setError("Check your connection and try again.");
+      return;
+    }
+
     if (res.error) {
       setError(res.error);
       return;
     }
 
-    // Pass phone + is_new_user flag via query params (no router state in App Router)
-    const params = new URLSearchParams({
-      phone: trimmed,
-      new_user: res.data?.is_new_user ? "1" : "0",
-    });
+    const redirect = searchParams.get("redirect") ?? "";
+    const params = new URLSearchParams({ phone: trimmed, pin_id: res.data!.pin_id });
+    if (redirect) params.set("redirect", redirect);
     router.push(`/verify?${params.toString()}`);
   }
 
@@ -54,6 +67,12 @@ export default function LoginPage() {
           Your agreements.<br />
           Witnessed. Sealed. Safe.
         </h1>
+
+        {sessionMsg && (
+          <div style={styles.sessionBanner} role="alert">
+            {sessionMsg}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} style={styles.form} noValidate>
           <label htmlFor="phone" style={styles.label}>
@@ -182,5 +201,14 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#9CA3AF",
     textAlign: "center",
     lineHeight: 1.6,
+  },
+  sessionBanner: {
+    backgroundColor: "#FEF3C7",
+    border: "1px solid #FCD34D",
+    borderRadius: 8,
+    padding: "10px 14px",
+    fontSize: 13,
+    color: "#92400E",
+    marginBottom: 16,
   },
 };

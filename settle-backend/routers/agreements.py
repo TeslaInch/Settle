@@ -184,7 +184,10 @@ async def get_agreement(
     row = result.data
 
     if row["initiator_id"] != current_user.id and row.get("counterparty_id") != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a party to this agreement.",
+        )
 
     return _build_agreement_response(_enrich_agreement(row))
 
@@ -232,6 +235,11 @@ async def confirm_agreement(
 
     # 4. Check agreement is still pending
     if agreement["status"] != "pending":
+        if agreement["status"] == "active":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This agreement has already been confirmed.",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Agreement is already {agreement['status']}.",
@@ -321,3 +329,135 @@ async def confirm_agreement(
         message="Agreement sealed successfully.",
         agreement=_build_agreement_response(sealed_row),
     )
+
+
+# ── POST /agreements/{id}/resend-invite ───────────────────────────────────────
+
+@router.post("/{agreement_id}/resend-invite", status_code=status.HTTP_200_OK)
+async def resend_invite(
+    agreement_id: str,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """
+    Resend the confirmation invite to the counterparty.
+    Only the initiator can call this.
+    Issues a fresh token with a new 72-hour expiry.
+    """
+    result = (
+        supabase.table("agreements")
+        .select("*")
+        .eq("id", agreement_id)
+        .single()
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
+
+    agreement = result.data
+
+    # Only the initiator can resend
+    if agreement["initiator_id"] != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the initiator can resend the invite.",
+        )
+
+    # Only makes sense for pending agreements
+    if agreement["status"] != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot resend invite for a {agreement['status']} agreement.",
+        )
+
+    # Issue a fresh token
+    new_token = secrets.token_urlsafe(32)
+    new_expires_at = datetime.now(timezone.utc) + timedelta(hours=72)
+
+    update_result = (
+        supabase.table("agreements")
+        .update({
+            "confirmation_token": new_token,
+            "token_expires_at": new_expires_at.isoformat(),
+        })
+        .eq("id", agreement_id)
+        .execute()
+    )
+
+    if not update_result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to refresh confirmation token.",
+        )
+
+    confirm_url = f"{settings.PRODUCTION_FRONTEND_URL}/agreements/confirm/{new_token}"
+
+    # Notify counterparty — best effort
+    try:
+        await whatsapp_service.send_agreement_invite(
+            phone=agreement["counterparty_phone"],
+            initiator_name=current_user.full_name or current_user.phone_number,
+            agreement_title=agreement["title"],
+            amount=_format_amount(float(agreement["amount"])),
+            confirm_url=confirm_url,
+        )
+    except Exception:
+        pass
+
+    return {"message": "Invite resent successfully.", "expires_in_hours": 72}
+
+
+# ── GET /agreements/by-token/{token} (public) ─────────────────────────────────
+
+@router.get("/by-token/{token}")
+async def get_agreement_by_token(token: str):
+    """
+    Public endpoint — no auth required.
+    Returns a preview of the agreement for the confirmation page.
+    Returns 410 Gone if the token has expired.
+    Returns 409 Conflict if already confirmed.
+    """
+    result = (
+        supabase.table("agreements")
+        .select("*")
+        .eq("confirmation_token", token)
+        .single()
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
+
+    agreement = result.data
+
+    # Already confirmed
+    if agreement["status"] != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Agreement is already {agreement['status']}.",
+        )
+
+    # Token expired
+    expires_at_raw = agreement.get("token_expires_at")
+    if expires_at_raw:
+        expires_at = datetime.fromisoformat(expires_at_raw.replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            initiator = _get_profile_by_id(agreement["initiator_id"])
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Confirmation link has expired.",
+                headers={"X-Initiator-Name": initiator.get("full_name", "") if initiator else ""},
+            )
+
+    # Return preview (no sensitive seal data)
+    initiator = _get_profile_by_id(agreement["initiator_id"])
+
+    return {
+        "id": agreement["id"],
+        "title": agreement["title"],
+        "amount": float(agreement["amount"]),
+        "terms": agreement["terms"],
+        "repayment_date": agreement["repayment_date"],
+        "initiator_name": initiator.get("full_name") if initiator else None,
+        "initiator_phone": initiator.get("phone_number") if initiator else None,
+    }

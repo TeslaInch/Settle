@@ -188,3 +188,11 @@ export async function confirmPayment(
     method: "PATCH",
   });
 }
+
+export async function resendInvite(
+  agreementId: string
+): Promise<ApiResponse<{ message: string; expires_in_hours: number }>> {
+  return apiRequest(`/api/v1/agreements/${agreementId}/resend-invite`, {
+    method: "POST",
+  });
+}

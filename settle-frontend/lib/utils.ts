@@ -57,3 +57,33 @@ export function markFirstAgreementCreated(): void {
     localStorage.setItem("settle_has_agreement", "1");
   }
 }
+
+// ── Form validation ───────────────────────────────────────────────────────────
+
+export function validateNigerianPhone(value: string): string | null {
+  const v = value.trim().replace(/\s|-/g, "");
+  const valid =
+    (v.startsWith("+234") && v.length === 14 && /^\d+$/.test(v.slice(4))) ||
+    (v.startsWith("234") && v.length === 13 && /^\d+$/.test(v.slice(3))) ||
+    (v.startsWith("0") && v.length === 11 && /^\d+$/.test(v.slice(1)));
+  return valid ? null : "Enter a valid Nigerian phone number (e.g. 08012345678)";
+}
+
+export function validateAmount(value: string): string | null {
+  const n = parseFloat(value);
+  if (isNaN(n) || n <= 0) return "Enter a positive amount";
+  return null;
+}
+
+export function validateFutureDate(value: string): string | null {
+  if (!value) return "Repayment date is required";
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "Enter a valid date";
+  if (d <= new Date()) return "Repayment date must be in the future";
+  return null;
+}
+
+export function validateTerms(value: string): string | null {
+  if (value.trim().length < 20) return "Terms must be at least 20 characters";
+  return null;
+}
