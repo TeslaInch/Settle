@@ -113,10 +113,12 @@ async def create_agreement(
     # Notify counterparty — best effort, don't fail the request
     try:
         await whatsapp_service.send_agreement_invite(
-            phone=body.counterparty_phone,
+            counterparty_phone=body.counterparty_phone,
             initiator_name=current_user.full_name or current_user.phone_number,
             agreement_title=body.title,
             amount=_format_amount(body.amount),
+            currency_symbol="₦",
+            repayment_date=body.repayment_date.strftime("%d %b %Y"),
             confirm_url=confirm_url,
         )
     except Exception:
@@ -305,11 +307,15 @@ async def confirm_agreement(
     amount_str = _format_amount(float(agreement["amount"]))
 
     # 8. Notify both parties — best effort
+    sealed_at_str = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
     try:
         await whatsapp_service.send_sealed_confirmation(
             phone=initiator["phone_number"],
+            party_name=initiator.get("full_name") or initiator["phone_number"],
             agreement_title=agreement["title"],
             amount=amount_str,
+            currency_symbol="₦",
+            sealed_at=sealed_at_str,
             record_url=record_url,
         )
     except Exception:
@@ -318,8 +324,11 @@ async def confirm_agreement(
     try:
         await whatsapp_service.send_sealed_confirmation(
             phone=current_user.phone_number,
+            party_name=current_user.full_name or current_user.phone_number,
             agreement_title=agreement["title"],
             amount=amount_str,
+            currency_symbol="₦",
+            sealed_at=sealed_at_str,
             record_url=record_url,
         )
     except Exception:
@@ -395,10 +404,12 @@ async def resend_invite(
     # Notify counterparty — best effort
     try:
         await whatsapp_service.send_agreement_invite(
-            phone=agreement["counterparty_phone"],
+            counterparty_phone=agreement["counterparty_phone"],
             initiator_name=current_user.full_name or current_user.phone_number,
             agreement_title=agreement["title"],
             amount=_format_amount(float(agreement["amount"])),
+            currency_symbol="₦",
+            repayment_date=agreement["repayment_date"],
             confirm_url=confirm_url,
         )
     except Exception:

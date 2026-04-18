@@ -17,9 +17,10 @@ class Settings(BaseSettings):
     TERMII_API_KEY: str
     TERMII_SENDER_ID: str
 
-    # WhatsApp (360Dialog)
-    WHATSAPP_API_KEY: str
-    WHATSAPP_URL: str = "https://waba.360dialog.io/v1"
+    # WhatsApp — Meta Cloud API
+    WHATSAPP_PHONE_NUMBER_ID: str
+    WHATSAPP_ACCESS_TOKEN: str
+    WHATSAPP_API_VERSION: str = "v19.0"
 
     # JWT
     JWT_SECRET: str
@@ -29,8 +30,17 @@ class Settings(BaseSettings):
     # Environment
     ENVIRONMENT: str = "development"
 
-    # Production frontend URL (placeholder for now)
+    # Production frontend URL
     PRODUCTION_FRONTEND_URL: str = "https://settle.app"
+
+    @property
+    def WHATSAPP_BASE_URL(self) -> str:
+        return (
+            f"https://graph.facebook.com"
+            f"/{self.WHATSAPP_API_VERSION}"
+            f"/{self.WHATSAPP_PHONE_NUMBER_ID}"
+            f"/messages"
+        )
 
 
 settings = Settings()
