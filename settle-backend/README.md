@@ -1,6 +1,5 @@
 # Settle Backend
-
-Nigerian informal agreement witness API
+Informal agreement witness API
 
 ## Setup
 
