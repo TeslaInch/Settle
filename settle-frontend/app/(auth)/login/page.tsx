@@ -45,7 +45,7 @@ export default function LoginPage() {
     }
 
     const redirect = searchParams.get("redirect") ?? "";
-    const params = new URLSearchParams({ phone: trimmed, pin_id: res.data!.pin_id });
+    const params = new URLSearchParams({ phone: trimmed });
     if (redirect) params.set("redirect", redirect);
     router.push(`/verify?${params.toString()}`);
   }

@@ -11,7 +11,6 @@ export interface ApiResponse<T> {
 export interface SendOTPResponse {
   message: string;
   phone_number: string;
-  pin_id: string;
 }
 
 export interface VerifyOTPResponse {
@@ -117,12 +116,11 @@ export async function sendOTP(
 export async function verifyOTP(
   phone_number: string,
   otp_code: string,
-  pin_id: string,
   full_name?: string
 ): Promise<ApiResponse<VerifyOTPResponse>> {
   return apiRequest<VerifyOTPResponse>("/api/v1/auth/verify-otp", {
     method: "POST",
-    body: JSON.stringify({ phone_number, otp_code, pin_id, full_name }),
+    body: JSON.stringify({ phone_number, otp_code, full_name }),
   });
 }
 

@@ -1,9 +1,18 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# OTP PROVIDER: Supabase Auth (Twilio)
+#
+# When Termii business verification is complete,
+# replace supabase.auth OTP calls with TermiiService
+# for +234 numbers only. All other numbers stay on Twilio.
+#
+# Config switch: settings.USE_TERMII_FOR_NG = True/False
+# ─────────────────────────────────────────────────────────────────────────────
+
 from fastapi import APIRouter, HTTPException, status
 
 from core.database import supabase
 from core.security import create_access_token
 from models.schemas import OTPVerifyRequest, PhoneRequest, TokenResponse
-from services.termii import termii_service
 
 router = APIRouter()
 
@@ -11,38 +20,66 @@ router = APIRouter()
 @router.post("/send-otp")
 async def send_otp(body: PhoneRequest) -> dict:
     """
-    Send a 6-digit OTP to the given Nigerian phone number via Termii.
-    Phone number is normalized to +234 format before sending.
-    Returns the pinId from Termii — the client must pass this back on verify.
+    Send a 6-digit OTP to the given phone number via Supabase Auth (Twilio).
+    Phone number is normalized to +234 format by PhoneRequest validation.
     """
-    termii_response = await termii_service.send_otp(body.phone_number)
+    try:
+        response = supabase.auth.sign_in_with_otp({"phone": body.phone_number})
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to send OTP: {str(exc)}",
+        )
+
+    # Supabase returns an AuthOtpResponse; an error surfaces as an exception
+    # in the Python client, but guard against unexpected None responses too.
+    if response is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to send OTP. Please try again.",
+        )
 
     return {
         "message": "OTP sent successfully.",
         "phone_number": body.phone_number,
-        "pin_id": termii_response["pinId"],
     }
 
 
 @router.post("/verify-otp", response_model=TokenResponse)
 async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
     """
-    Verify the OTP code against Termii.
-    - If the user is new, full_name is required to create their profile.
-    - If the user exists, full_name is ignored.
+    Verify the OTP code via Supabase Auth.
+    - New users: full_name is required to create their profile.
+    - Existing users: full_name is ignored.
     Returns a JWT access token and an is_new_user flag.
     """
-    # 1. Verify OTP with Termii
-    # pin_id must be supplied by the client (returned from /send-otp)
-    # We re-use otp_code as the pin; pin_id comes from the request body
-    # Note: we embed pin_id in the verify request — see OTPVerifyRequest
-    await termii_service.verify_otp(body.pin_id, body.otp_code)
+    # 1. Verify OTP with Supabase Auth (Twilio under the hood)
+    try:
+        auth_response = supabase.auth.verify_otp({
+            "phone": body.phone_number,
+            "token": body.otp_code,
+            "type": "sms",
+        })
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired code.",
+        )
 
-    # 2. Check if profile already exists
+    if not auth_response or not auth_response.user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired code.",
+        )
+
+    auth_user = auth_response.user
+    user_id = auth_user.id
+
+    # 2. Check if a profile already exists
     existing = (
         supabase.table("profiles")
         .select("id, phone_number, full_name")
-        .eq("phone_number", body.phone_number)
+        .eq("id", user_id)
         .maybe_single()
         .execute()
     )
@@ -57,23 +94,10 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
                 detail="full_name is required for new users.",
             )
 
-        # Create Supabase Auth user with phone
-        auth_response = supabase.auth.admin.create_user({
-            "phone": body.phone_number,
-            "phone_confirm": True,
-            "user_metadata": {"full_name": body.full_name.strip()},
-        })
-
-        if not auth_response.user:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create user account. Please try again.",
-            )
-
-        user_id = auth_response.user.id
-
-        # Insert profile row (trigger may also do this, but we set full_name here)
-        profile_insert = (
+        # Insert profile row
+        # The DB trigger (handle_new_user) may have already created a minimal row;
+        # upsert ensures we always set full_name correctly.
+        profile_result = (
             supabase.table("profiles")
             .upsert({
                 "id": user_id,
@@ -83,16 +107,13 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
             .execute()
         )
 
-        if not profile_insert.data:
+        if not profile_result.data:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create user profile. Please try again.",
             )
 
-    else:
-        user_id = existing.data["id"]
-
-    # 3. Issue JWT
+    # 3. Issue our own JWT (we manage sessions independently of Supabase Auth)
     access_token = create_access_token(data={"sub": user_id})
 
     return TokenResponse(

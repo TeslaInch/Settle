@@ -9,12 +9,15 @@ function VerifyForm() {
   const params = useSearchParams();
 
   const phone = params.get("phone") ?? "";
-  const isNewUser = params.get("new_user") === "1";
+  const redirect = params.get("redirect") ?? "/dashboard";
 
   const last4 = phone.slice(-4);
 
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
+  // We always show the full-name field on first attempt;
+  // if the user already exists the backend ignores it.
   const [fullName, setFullName] = useState("");
+  const [showNameField, setShowNameField] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(60);
@@ -24,34 +27,25 @@ function VerifyForm() {
 
   // Countdown timer
   useEffect(() => {
-    if (countdown <= 0) {
-      setCanResend(true);
-      return;
-    }
+    if (countdown <= 0) { setCanResend(true); return; }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [countdown]);
 
-  const focusInput = (index: number) => {
-    inputRefs.current[index]?.focus();
-  };
+  const focusInput = (index: number) => inputRefs.current[index]?.focus();
 
   const handleOtpChange = (index: number, value: string) => {
     const char = value.replace(/\D/g, "").slice(-1);
     const next = [...otp];
     next[index] = char;
     setOtp(next);
-    if (char && index < 5) {
-      focusInput(index + 1);
-    }
+    if (char && index < 5) focusInput(index + 1);
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace") {
       if (otp[index]) {
-        const next = [...otp];
-        next[index] = "";
-        setOtp(next);
+        const next = [...otp]; next[index] = ""; setOtp(next);
       } else if (index > 0) {
         focusInput(index - 1);
       }
@@ -60,10 +54,7 @@ function VerifyForm() {
 
   const handleOtpPaste = (e: React.ClipboardEvent) => {
     const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
-    if (pasted.length === 6) {
-      setOtp(pasted.split(""));
-      focusInput(5);
-    }
+    if (pasted.length === 6) { setOtp(pasted.split("")); focusInput(5); }
     e.preventDefault();
   };
 
@@ -84,14 +75,27 @@ function VerifyForm() {
       setError("Please enter the full 6-digit code.");
       return;
     }
-    if (isNewUser && !fullName.trim()) {
+
+    // If name field is visible and empty, block submission
+    if (showNameField && !fullName.trim()) {
       setError("Please enter your full name.");
       return;
     }
 
     setLoading(true);
-    const res = await verifyOTP(phone, code, isNewUser ? fullName.trim() : undefined);
+    const res = await verifyOTP(
+      phone,
+      code,
+      fullName.trim() || undefined
+    );
     setLoading(false);
+
+    // Backend returns 422 when full_name is required for a new user
+    if (res.status === 422 || res.error?.includes("full_name")) {
+      setShowNameField(true);
+      setError("Please enter your full name to complete sign-up.");
+      return;
+    }
 
     if (res.error) {
       setError(res.error);
@@ -101,10 +105,10 @@ function VerifyForm() {
     }
 
     if (res.data?.access_token) {
-      localStorage.setItem("token", res.data.access_token);
+      localStorage.setItem("settle_token", res.data.access_token);
     }
 
-    router.push("/dashboard");
+    router.push(redirect);
   }
 
   return (
@@ -127,8 +131,8 @@ function VerifyForm() {
         </p>
 
         <form onSubmit={handleSubmit} style={styles.form} noValidate>
-          {/* Full name — only for new users */}
-          {isNewUser && (
+          {/* Full name — shown when backend signals new user */}
+          {showNameField && (
             <div style={styles.fieldGroup}>
               <label htmlFor="full-name" style={styles.label}>
                 Full name
@@ -142,6 +146,7 @@ function VerifyForm() {
                 onChange={(e) => setFullName(e.target.value)}
                 style={styles.input}
                 disabled={loading}
+                autoFocus
               />
             </div>
           )}
@@ -169,9 +174,7 @@ function VerifyForm() {
           </div>
 
           {error && (
-            <p style={styles.errorText} role="alert">
-              {error}
-            </p>
+            <p style={styles.errorText} role="alert">{error}</p>
           )}
 
           <button
@@ -194,9 +197,7 @@ function VerifyForm() {
               Resend code
             </button>
           ) : (
-            <span style={styles.resendCountdown}>
-              Resend code in {countdown}s
-            </span>
+            <span style={styles.resendCountdown}>Resend code in {countdown}s</span>
           )}
         </div>
       </div>

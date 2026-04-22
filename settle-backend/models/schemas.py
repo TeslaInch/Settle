@@ -46,7 +46,6 @@ class PhoneRequest(BaseModel):
 class OTPVerifyRequest(BaseModel):
     phone_number: str
     otp_code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
-    pin_id: str = Field(..., min_length=1, description="pinId returned by /send-otp")
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
 
     @field_validator("phone_number")
