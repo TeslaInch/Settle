@@ -137,7 +137,7 @@ export default function PaymentsPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
       {/* Top bar */}
-      <div className="bg-white px-4 pt-12 pb-4 shadow-sm">
+      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back">
             <ArrowLeft size={22} className="text-gray-700" />
@@ -205,13 +205,15 @@ export default function PaymentsPage() {
       </div>
 
       {/* Log payment button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 px-4 py-4">
-        <button
-          onClick={openLogSheet}
-          className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-semibold text-white active:scale-[0.98] transition-transform"
-        >
-          Log New Payment
-        </button>
+      <div className="fixed bottom-0 left-0 right-0 flex justify-center bg-white border-t border-gray-100">
+        <div className="w-full max-w-[640px] px-4 py-4">
+          <button
+            onClick={openLogSheet}
+            className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-semibold text-white active:scale-[0.98] transition-transform"
+          >
+            Log New Payment
+          </button>
+        </div>
       </div>
 
       {/* Log payment bottom sheet */}

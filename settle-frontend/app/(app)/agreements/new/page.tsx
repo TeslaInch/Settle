@@ -108,7 +108,7 @@ export default function NewAgreementPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       {/* Header */}
-      <div className="bg-white px-4 pt-12 pb-4 shadow-sm">
+      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back">
             <ArrowLeft size={22} className="text-gray-700" />

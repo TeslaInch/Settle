@@ -1,57 +1,19 @@
-import re
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, Any
 
-from pydantic import BaseModel, Field, field_validator
-
-
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-def normalize_nigerian_phone(value: str) -> str:
-    """
-    Accept:
-      +2348012345678  (13 chars with country code)
-       2348012345678  (13 chars, no +)
-       08012345678    (11 chars, local 0-prefix)
-    Return: +2348012345678
-    """
-    v = value.strip().replace(" ", "").replace("-", "")
-
-    if v.startswith("+234") and len(v) == 14 and v[4:].isdigit():
-        return v
-
-    if v.startswith("234") and len(v) == 13 and v[3:].isdigit():
-        return f"+{v}"
-
-    if v.startswith("0") and len(v) == 11 and v[1:].isdigit():
-        return f"+234{v[1:]}"
-
-    raise ValueError(
-        "Invalid Nigerian phone number. "
-        "Use +2348XXXXXXXXX, 2348XXXXXXXXX, or 08XXXXXXXXX format."
-    )
+from pydantic import BaseModel, EmailStr, Field
 
 
-# ── Auth ─────────────────────────────────────────────────────────────────────
+# ── Auth ──────────────────────────────────────────────────────────────────────
 
-class PhoneRequest(BaseModel):
-    phone_number: str
-
-    @field_validator("phone_number")
-    @classmethod
-    def validate_and_normalize(cls, v: str) -> str:
-        return normalize_nigerian_phone(v)
+class EmailRequest(BaseModel):
+    email: EmailStr
 
 
-class OTPVerifyRequest(BaseModel):
-    phone_number: str
-    otp_code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+class EmailVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
-
-    @field_validator("phone_number")
-    @classmethod
-    def validate_and_normalize(cls, v: str) -> str:
-        return normalize_nigerian_phone(v)
 
 
 class TokenResponse(BaseModel):
@@ -62,7 +24,7 @@ class TokenResponse(BaseModel):
 
 class UserProfile(BaseModel):
     id: str
-    phone_number: str
+    email: str
     full_name: Optional[str] = None
 
 
@@ -72,13 +34,8 @@ class AgreementCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     amount: float = Field(..., gt=0)
     terms: str = Field(..., min_length=1)
-    counterparty_phone: str
+    counterparty_email: EmailStr
     repayment_date: datetime
-
-    @field_validator("counterparty_phone")
-    @classmethod
-    def validate_counterparty_phone(cls, v: str) -> str:
-        return normalize_nigerian_phone(v)
 
 
 class AgreementResponse(BaseModel):
@@ -88,11 +45,12 @@ class AgreementResponse(BaseModel):
     terms: str
     status: str
     initiator_id: str
-    initiator_phone: Optional[str] = None
+    initiator_email: Optional[str] = None
     initiator_name: Optional[str] = None
     counterparty_id: Optional[str] = None
-    counterparty_phone: str
+    counterparty_email: str
     counterparty_name: Optional[str] = None
+    other_party_name: Optional[str] = None
     repayment_date: datetime
     seal_hash: Optional[str] = None
     seal_payload: Optional[Any] = None
@@ -109,19 +67,9 @@ class ConfirmResponse(BaseModel):
     agreement: AgreementResponse
 
 
-class AgreementConfirmRequest(BaseModel):
-    token: str = Field(..., min_length=32)
-
-
-class AgreementConfirmResponse(BaseModel):
-    message: str
-    agreement_id: str
-
-
 # ── Payments ──────────────────────────────────────────────────────────────────
 
 class PaymentLogRequest(BaseModel):
-    agreement_id: str
     amount: float = Field(..., gt=0)
     note: Optional[str] = None
 
@@ -139,7 +87,11 @@ class PaymentResponse(BaseModel):
 
 # ── Notifications ─────────────────────────────────────────────────────────────
 
-class NotificationSendRequest(BaseModel):
-    phone: str
-    message: str
-    channel: str = Field(..., pattern="^(sms|whatsapp)$")
+class NotificationResponse(BaseModel):
+    id: str
+    user_id: str
+    agreement_id: Optional[str] = None
+    type: str
+    channel: str
+    status: str
+    sent_at: datetime

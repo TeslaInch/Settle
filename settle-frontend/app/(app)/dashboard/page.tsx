@@ -60,7 +60,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white px-4 pt-12 pb-4 shadow-sm">
+      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-400 uppercase tracking-wide">Settle</p>
@@ -132,14 +132,18 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* FAB */}
-      <button
-        onClick={() => router.push("/agreements/new")}
-        aria-label="Create new agreement"
-        className="fixed bottom-6 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 shadow-lg active:scale-95 transition-transform"
-      >
-        <Plus size={26} className="text-white" />
-      </button>
+      {/* FAB — positioned relative to app-shell, not viewport edge */}
+      <div className="pointer-events-none fixed bottom-0 left-0 right-0 flex justify-center z-40">
+        <div className="relative w-full max-w-[640px]">
+          <button
+            onClick={() => router.push("/agreements/new")}
+            aria-label="Create new agreement"
+            className="pointer-events-auto absolute bottom-6 right-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 shadow-lg active:scale-95 transition-transform"
+          >
+            <Plus size={26} className="text-white" />
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

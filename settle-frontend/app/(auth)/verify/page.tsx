@@ -14,8 +14,6 @@ function VerifyForm() {
   const last4 = phone.slice(-4);
 
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
-  // We always show the full-name field on first attempt;
-  // if the user already exists the backend ignores it.
   const [fullName, setFullName] = useState("");
   const [showNameField, setShowNameField] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,7 +23,6 @@ function VerifyForm() {
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Countdown timer
   useEffect(() => {
     if (countdown <= 0) { setCanResend(true); return; }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
@@ -76,21 +73,15 @@ function VerifyForm() {
       return;
     }
 
-    // If name field is visible and empty, block submission
     if (showNameField && !fullName.trim()) {
       setError("Please enter your full name.");
       return;
     }
 
     setLoading(true);
-    const res = await verifyOTP(
-      phone,
-      code,
-      fullName.trim() || undefined
-    );
+    const res = await verifyOTP(phone, code, fullName.trim() || undefined);
     setLoading(false);
 
-    // Backend returns 422 when full_name is required for a new user
     if (res.status === 422 || res.error?.includes("full_name")) {
       setShowNameField(true);
       setError("Please enter your full name to complete sign-up.");
@@ -112,29 +103,31 @@ function VerifyForm() {
   }
 
   return (
-    <main style={styles.container}>
-      <div style={styles.inner}>
+    <main className="min-h-dvh bg-gray-50 flex items-center justify-center px-5 py-6">
+      <div className="w-full max-w-sm flex flex-col">
         {/* Logo */}
-        <div style={styles.logoWrap}>
+        <div className="flex items-center gap-2.5 mb-10">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#1B4332" />
             <path d="M10 22l6-12 6 12" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M12.5 18h7" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
           </svg>
-          <span style={styles.wordmark}>Settle</span>
+          <span className="text-xl font-bold text-[#1B4332] tracking-tight">Settle</span>
         </div>
 
-        <h1 style={styles.heading}>Enter your code</h1>
-        <p style={styles.subheading}>
+        <h1 className="text-[26px] font-bold text-gray-900 tracking-tight mb-2">
+          Enter your code
+        </h1>
+        <p className="text-[15px] text-gray-500 leading-relaxed mb-8">
           We sent a 6-digit code to the number ending in{" "}
-          <strong style={{ color: "#111827" }}>••••{last4}</strong>
+          <strong className="text-gray-900">••••{last4}</strong>
         </p>
 
-        <form onSubmit={handleSubmit} style={styles.form} noValidate>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {/* Full name — shown when backend signals new user */}
           {showNameField && (
-            <div style={styles.fieldGroup}>
-              <label htmlFor="full-name" style={styles.label}>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="full-name" className="text-sm font-medium text-gray-700">
                 Full name
               </label>
               <input
@@ -144,15 +137,15 @@ function VerifyForm() {
                 placeholder="Ada Okonkwo"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                style={styles.input}
                 disabled={loading}
                 autoFocus
+                className="h-[52px] rounded-[10px] border border-gray-300 px-4 text-base text-gray-900 bg-white outline-none focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20 transition-colors w-full disabled:opacity-60"
               />
             </div>
           )}
 
           {/* OTP boxes */}
-          <div style={styles.otpRow} onPaste={handleOtpPaste}>
+          <div className="flex gap-2.5 justify-between" onPaste={handleOtpPaste}>
             {otp.map((digit, i) => (
               <input
                 key={i}
@@ -163,41 +156,42 @@ function VerifyForm() {
                 value={digit}
                 onChange={(e) => handleOtpChange(i, e.target.value)}
                 onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                style={{
-                  ...styles.otpBox,
-                  borderColor: error ? "#DC2626" : digit ? "#1B4332" : "#D1D5DB",
-                }}
                 disabled={loading}
                 aria-label={`OTP digit ${i + 1}`}
+                className={[
+                  "flex-1 min-w-0 h-14 rounded-[10px] border text-center text-[22px] font-semibold text-gray-900 bg-white outline-none transition-colors",
+                  error ? "border-red-500" : digit ? "border-[#1B4332]" : "border-gray-300",
+                  "focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20",
+                  loading ? "opacity-60" : "",
+                ].join(" ")}
               />
             ))}
           </div>
 
           {error && (
-            <p style={styles.errorText} role="alert">{error}</p>
+            <p className="text-[13px] text-red-600 m-0" role="alert">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            style={{
-              ...styles.button,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
+            className="mt-1 h-[52px] rounded-[10px] bg-[#1B4332] text-white text-base font-semibold w-full transition-opacity disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {loading ? "Verifying…" : "Verify & Continue"}
           </button>
         </form>
 
         {/* Resend */}
-        <div style={styles.resendWrap}>
+        <div className="mt-6 text-center">
           {canResend ? (
-            <button onClick={handleResend} style={styles.resendBtn}>
+            <button
+              onClick={handleResend}
+              className="bg-transparent border-none text-[#1B4332] text-sm font-semibold cursor-pointer py-2 min-h-[48px]"
+            >
               Resend code
             </button>
           ) : (
-            <span style={styles.resendCountdown}>Resend code in {countdown}s</span>
+            <span className="text-sm text-gray-400">Resend code in {countdown}s</span>
           )}
         </div>
       </div>
@@ -212,127 +206,3 @@ export default function VerifyPage() {
     </Suspense>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100dvh",
-    backgroundColor: "#F9FAFB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px 20px",
-    fontFamily: "'Inter', sans-serif",
-  },
-  inner: {
-    width: "100%",
-    maxWidth: 400,
-    display: "flex",
-    flexDirection: "column",
-  },
-  logoWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 40,
-  },
-  wordmark: {
-    fontSize: 20,
-    fontWeight: 700,
-    color: "#1B4332",
-    letterSpacing: "-0.5px",
-  },
-  heading: {
-    fontSize: 26,
-    fontWeight: 700,
-    color: "#111827",
-    marginBottom: 8,
-    letterSpacing: "-0.4px",
-  },
-  subheading: {
-    fontSize: 15,
-    color: "#6B7280",
-    marginBottom: 32,
-    lineHeight: 1.5,
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 16,
-  },
-  fieldGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 500,
-    color: "#374151",
-  },
-  input: {
-    height: 52,
-    borderRadius: 10,
-    border: "1.5px solid #D1D5DB",
-    padding: "0 16px",
-    fontSize: 16,
-    color: "#111827",
-    backgroundColor: "#fff",
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  otpRow: {
-    display: "flex",
-    gap: 10,
-    justifyContent: "space-between",
-  },
-  otpBox: {
-    flex: 1,
-    height: 56,
-    borderRadius: 10,
-    border: "1.5px solid #D1D5DB",
-    textAlign: "center",
-    fontSize: 22,
-    fontWeight: 600,
-    color: "#111827",
-    backgroundColor: "#fff",
-    outline: "none",
-    transition: "border-color 0.15s",
-    minWidth: 0,
-  },
-  errorText: {
-    fontSize: 13,
-    color: "#DC2626",
-    margin: 0,
-  },
-  button: {
-    marginTop: 4,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: "#1B4332",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: 600,
-    border: "none",
-    width: "100%",
-    transition: "opacity 0.15s",
-  },
-  resendWrap: {
-    marginTop: 24,
-    textAlign: "center",
-  },
-  resendBtn: {
-    background: "none",
-    border: "none",
-    color: "#1B4332",
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: "pointer",
-    padding: "8px 0",
-    minHeight: 48,
-  },
-  resendCountdown: {
-    fontSize: 14,
-    color: "#9CA3AF",
-  },
-};

@@ -1,66 +1,56 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# OTP PROVIDER: Supabase Auth (Twilio)
-#
-# When Termii business verification is complete,
-# replace supabase.auth OTP calls with TermiiService
-# for +234 numbers only. All other numbers stay on Twilio.
-#
-# Config switch: settings.USE_TERMII_FOR_NG = True/False
+# AUTH PROVIDER: Supabase Auth (email OTP)
+# Supabase sends a 6-digit code to the user's email address.
+# We verify it, create a profile if new, then issue our own JWT.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from core.database import supabase
-from core.security import create_access_token
-from models.schemas import OTPVerifyRequest, PhoneRequest, TokenResponse
+from core.security import create_access_token, get_current_user
+from models.schemas import EmailRequest, EmailVerifyRequest, TokenResponse, UserProfile
 
 router = APIRouter()
 
 
-@router.post("/send-otp")
-async def send_otp(body: PhoneRequest) -> dict:
+@router.post("/send-code")
+async def send_code(body: EmailRequest) -> dict:
     """
-    Send a 6-digit OTP to the given phone number via Supabase Auth (Twilio).
-    Phone number is normalized to +234 format by PhoneRequest validation.
+    Send a 6-digit OTP to the given email address via Supabase Auth.
     """
     try:
-        response = supabase.auth.sign_in_with_otp({"phone": body.phone_number})
+        response = supabase.auth.sign_in_with_otp({"email": body.email})
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to send OTP: {str(exc)}",
+            detail=f"Failed to send code: {str(exc)}",
         )
 
-    # Supabase returns an AuthOtpResponse; an error surfaces as an exception
-    # in the Python client, but guard against unexpected None responses too.
     if response is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to send OTP. Please try again.",
+            detail="Failed to send code. Please try again.",
         )
 
-    return {
-        "message": "OTP sent successfully.",
-        "phone_number": body.phone_number,
-    }
+    return {"message": "Check your email for a 6-digit code."}
 
 
-@router.post("/verify-otp", response_model=TokenResponse)
-async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
+@router.post("/verify-code", response_model=TokenResponse)
+async def verify_code(body: EmailVerifyRequest) -> TokenResponse:
     """
-    Verify the OTP code via Supabase Auth.
+    Verify the 6-digit email OTP via Supabase Auth.
     - New users: full_name is required to create their profile.
     - Existing users: full_name is ignored.
     Returns a JWT access token and an is_new_user flag.
     """
-    # 1. Verify OTP with Supabase Auth (Twilio under the hood)
+    # 1. Verify OTP with Supabase Auth
     try:
         auth_response = supabase.auth.verify_otp({
-            "phone": body.phone_number,
-            "token": body.otp_code,
-            "type": "sms",
+            "email": body.email,
+            "token": body.code,
+            "type": "email",
         })
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired code.",
@@ -78,7 +68,7 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
     # 2. Check if a profile already exists
     existing = (
         supabase.table("profiles")
-        .select("id, phone_number, full_name")
+        .select("id, email, full_name")
         .eq("id", user_id)
         .maybe_single()
         .execute()
@@ -94,14 +84,11 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
                 detail="full_name is required for new users.",
             )
 
-        # Insert profile row
-        # The DB trigger (handle_new_user) may have already created a minimal row;
-        # upsert ensures we always set full_name correctly.
         profile_result = (
             supabase.table("profiles")
             .upsert({
                 "id": user_id,
-                "phone_number": body.phone_number,
+                "email": body.email,
                 "full_name": body.full_name.strip(),
             })
             .execute()
@@ -113,7 +100,7 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
                 detail="Failed to create user profile. Please try again.",
             )
 
-    # 3. Issue our own JWT (we manage sessions independently of Supabase Auth)
+    # 3. Issue our own JWT
     access_token = create_access_token(data={"sub": user_id})
 
     return TokenResponse(
@@ -121,3 +108,9 @@ async def verify_otp(body: OTPVerifyRequest) -> TokenResponse:
         token_type="bearer",
         is_new_user=is_new_user,
     )
+
+
+@router.get("/me", response_model=UserProfile)
+async def get_me(current_user: UserProfile = Depends(get_current_user)) -> UserProfile:
+    """Return the current authenticated user's profile."""
+    return current_user

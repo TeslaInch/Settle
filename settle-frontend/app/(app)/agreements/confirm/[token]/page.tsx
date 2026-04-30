@@ -219,7 +219,7 @@ export default function ConfirmAgreementPage() {
   const { agreement } = state;
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
-      <div className="bg-white px-4 pt-12 pb-5 shadow-sm">
+      <div className="bg-white px-4 pt-12 md:pt-6 pb-5 shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Review Agreement</h1>
         <p className="text-sm text-gray-500 mt-1">
           {agreement.initiator_name ?? agreement.initiator_phone} wants you to confirm this.

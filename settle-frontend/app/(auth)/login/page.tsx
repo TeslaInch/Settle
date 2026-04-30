@@ -51,31 +51,34 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={styles.container}>
-      <div style={styles.inner}>
+    <main className="min-h-dvh bg-gray-50 flex items-center justify-center px-5 py-6">
+      <div className="w-full max-w-sm flex flex-col">
         {/* Logo / Wordmark */}
-        <div style={styles.logoWrap}>
+        <div className="flex items-center gap-2.5 mb-10">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#1B4332" />
             <path d="M10 22l6-12 6 12" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M12.5 18h7" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
           </svg>
-          <span style={styles.wordmark}>Settle</span>
+          <span className="text-[22px] font-bold text-[#1B4332] tracking-tight">Settle</span>
         </div>
 
-        <h1 style={styles.headline}>
+        <h1 className="text-[28px] font-bold text-gray-900 leading-snug tracking-tight mb-9">
           Your agreements.<br />
           Witnessed. Sealed. Safe.
         </h1>
 
         {sessionMsg && (
-          <div style={styles.sessionBanner} role="alert">
+          <div
+            className="bg-amber-50 border border-amber-300 rounded-lg px-3.5 py-2.5 text-[13px] text-amber-800 mb-4"
+            role="alert"
+          >
             {sessionMsg}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={styles.form} noValidate>
-          <label htmlFor="phone" style={styles.label}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3" noValidate>
+          <label htmlFor="phone" className="text-sm font-medium text-gray-700">
             Phone number
           </label>
           <input
@@ -86,13 +89,13 @@ export default function LoginPage() {
             placeholder="+234 or 080..."
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            style={styles.input}
             disabled={loading}
             aria-describedby={error ? "phone-error" : undefined}
+            className="h-[52px] rounded-[10px] border border-gray-300 px-4 text-base text-gray-900 bg-white outline-none focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20 transition-colors w-full disabled:opacity-60"
           />
 
           {error && (
-            <p id="phone-error" style={styles.errorText} role="alert">
+            <p id="phone-error" className="text-[13px] text-red-600 m-0" role="alert">
               {error}
             </p>
           )}
@@ -100,115 +103,16 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            style={{
-              ...styles.button,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? "not-allowed" : "pointer",
-            }}
+            className="mt-2 h-[52px] rounded-[10px] bg-[#1B4332] text-white text-base font-semibold w-full transition-opacity disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {loading ? "Sending…" : "Send Code"}
           </button>
         </form>
 
-        <p style={styles.footnote}>
+        <p className="mt-6 text-xs text-gray-400 text-center leading-relaxed">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
       </div>
     </main>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: "100dvh",
-    backgroundColor: "#F9FAFB",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "24px 20px",
-    fontFamily: "'Inter', sans-serif",
-  },
-  inner: {
-    width: "100%",
-    maxWidth: 400,
-    display: "flex",
-    flexDirection: "column",
-    gap: 0,
-  },
-  logoWrap: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 40,
-  },
-  wordmark: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: "#1B4332",
-    letterSpacing: "-0.5px",
-  },
-  headline: {
-    fontSize: 28,
-    fontWeight: 700,
-    color: "#111827",
-    lineHeight: 1.3,
-    marginBottom: 36,
-    letterSpacing: "-0.5px",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: 500,
-    color: "#374151",
-  },
-  input: {
-    height: 52,
-    borderRadius: 10,
-    border: "1.5px solid #D1D5DB",
-    padding: "0 16px",
-    fontSize: 16,
-    color: "#111827",
-    backgroundColor: "#fff",
-    outline: "none",
-    width: "100%",
-    boxSizing: "border-box",
-    transition: "border-color 0.15s",
-  },
-  errorText: {
-    fontSize: 13,
-    color: "#DC2626",
-    margin: 0,
-  },
-  button: {
-    marginTop: 8,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: "#1B4332",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: 600,
-    border: "none",
-    width: "100%",
-    transition: "opacity 0.15s",
-  },
-  footnote: {
-    marginTop: 24,
-    fontSize: 12,
-    color: "#9CA3AF",
-    textAlign: "center",
-    lineHeight: 1.6,
-  },
-  sessionBanner: {
-    backgroundColor: "#FEF3C7",
-    border: "1px solid #FCD34D",
-    borderRadius: 8,
-    padding: "10px 14px",
-    fontSize: 13,
-    color: "#92400E",
-    marginBottom: 16,
-  },
-};
