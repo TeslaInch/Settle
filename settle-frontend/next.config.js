@@ -7,7 +7,6 @@ const withPWA = require("next-pwa")({
     document: "/offline",
   },
   runtimeCaching: [
-    // Network-first for all API calls
     {
       urlPattern: /^https?:\/\/.*\/api\/v1\/.*/i,
       handler: "NetworkFirst",
@@ -15,12 +14,11 @@ const withPWA = require("next-pwa")({
         cacheName: "settle-api-cache",
         expiration: {
           maxEntries: 64,
-          maxAgeSeconds: 24 * 60 * 60, // 24 hours
+          maxAgeSeconds: 24 * 60 * 60,
         },
         networkTimeoutSeconds: 10,
       },
     },
-    // Cache-first for Next.js static assets
     {
       urlPattern: /^\/_next\/static\/.*/i,
       handler: "CacheFirst",
@@ -28,11 +26,10 @@ const withPWA = require("next-pwa")({
         cacheName: "next-static",
         expiration: {
           maxEntries: 128,
-          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+          maxAgeSeconds: 30 * 24 * 60 * 60,
         },
       },
     },
-    // Cache-first for images and fonts
     {
       urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|ico|woff|woff2|ttf|otf)$/i,
       handler: "CacheFirst",
@@ -44,7 +41,6 @@ const withPWA = require("next-pwa")({
         },
       },
     },
-    // Stale-while-revalidate for static pages
     {
       urlPattern: /^https?:\/\/.*\/(?:dashboard|agreements|login|verify).*/i,
       handler: "StaleWhileRevalidate",
@@ -60,6 +56,15 @@ const withPWA = require("next-pwa")({
 });
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+  async rewrites() {
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `http://localhost:8000/api/v1/:path*`,
+      },
+    ];
+  },
+};
 
 module.exports = withPWA(nextConfig);

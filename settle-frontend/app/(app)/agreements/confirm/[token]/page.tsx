@@ -14,7 +14,7 @@ interface AgreementPreview {
   amount: number;
   terms: string;
   initiator_name: string | null;
-  initiator_phone: string;
+  initiator_email: string;
   repayment_date: string;
 }
 
@@ -222,7 +222,7 @@ export default function ConfirmAgreementPage() {
       <div className="bg-white px-4 pt-12 md:pt-6 pb-5 shadow-sm">
         <h1 className="text-xl font-bold text-gray-900">Review Agreement</h1>
         <p className="text-sm text-gray-500 mt-1">
-          {agreement.initiator_name ?? agreement.initiator_phone} wants you to confirm this.
+          {agreement.initiator_name ?? agreement.initiator_email} wants you to confirm this.
         </p>
       </div>
 

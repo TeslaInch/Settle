@@ -1,7 +1,10 @@
 import secrets
+import tempfile
+import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from core.config import settings
 from core.database import supabase
@@ -13,7 +16,8 @@ from models.schemas import (
     ConfirmResponse,
     UserProfile,
 )
-from services.whatsapp import whatsapp_service
+from services.email import email_service
+from services.pdf import pdf_service
 from utils.agreement_lock import seal_agreement
 
 router = APIRouter(prefix="/agreements", tags=["agreements"])
@@ -25,7 +29,7 @@ def _format_amount(amount: float) -> str:
     return f"{amount:,.2f}"
 
 
-def _build_agreement_response(row: dict) -> AgreementResponse:
+def _build_agreement_response(row: dict, other_party_name: str | None = None) -> AgreementResponse:
     return AgreementResponse(
         id=row["id"],
         title=row["title"],
@@ -33,11 +37,12 @@ def _build_agreement_response(row: dict) -> AgreementResponse:
         terms=row["terms"],
         status=row["status"],
         initiator_id=row["initiator_id"],
-        initiator_phone=row.get("initiator_phone"),
+        initiator_email=row.get("initiator_email"),
         initiator_name=row.get("initiator_name"),
         counterparty_id=row.get("counterparty_id"),
-        counterparty_phone=row["counterparty_phone"],
+        counterparty_email=row["counterparty_email"],
         counterparty_name=row.get("counterparty_name"),
+        other_party_name=other_party_name,
         repayment_date=row["repayment_date"],
         seal_hash=row.get("seal_hash"),
         seal_payload=row.get("seal_payload"),
@@ -49,7 +54,7 @@ def _build_agreement_response(row: dict) -> AgreementResponse:
 def _get_profile_by_id(user_id: str) -> dict | None:
     result = (
         supabase.table("profiles")
-        .select("id, phone_number, full_name")
+        .select("id, email, full_name")
         .eq("id", user_id)
         .single()
         .execute()
@@ -57,11 +62,22 @@ def _get_profile_by_id(user_id: str) -> dict | None:
     return result.data
 
 
+def _get_profile_by_email(email: str) -> dict | None:
+    result = (
+        supabase.table("profiles")
+        .select("id, email, full_name")
+        .eq("email", email)
+        .maybe_single()
+        .execute()
+    )
+    return result.data
+
+
 def _enrich_agreement(row: dict) -> dict:
-    """Attach initiator/counterparty names and phones from profiles."""
+    """Attach initiator/counterparty names and emails from profiles."""
     initiator = _get_profile_by_id(row["initiator_id"])
     if initiator:
-        row["initiator_phone"] = initiator.get("phone_number")
+        row["initiator_email"] = initiator.get("email")
         row["initiator_name"] = initiator.get("full_name")
 
     if row.get("counterparty_id"):
@@ -81,17 +97,14 @@ async def create_agreement(
 ):
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=72)
-
-    confirm_url = (
-        f"{settings.PRODUCTION_FRONTEND_URL}/agreements/confirm/{token}"
-    )
+    confirm_url = f"{settings.FRONTEND_URL}/agreements/confirm/{token}"
 
     insert_data = {
         "title": body.title,
         "amount": body.amount,
         "terms": body.terms,
         "initiator_id": current_user.id,
-        "counterparty_phone": body.counterparty_phone,
+        "counterparty_email": body.counterparty_email,
         "repayment_date": body.repayment_date.isoformat(),
         "status": "pending",
         "confirmation_token": token,
@@ -107,22 +120,37 @@ async def create_agreement(
         )
 
     row = result.data[0]
-    row["initiator_phone"] = current_user.phone_number
+    row["initiator_email"] = current_user.email
     row["initiator_name"] = current_user.full_name
 
-    # Notify counterparty — best effort, don't fail the request
+    initiator_name = current_user.full_name or current_user.email
+
+    # Notify counterparty — best effort
     try:
-        await whatsapp_service.send_agreement_invite(
-            counterparty_phone=body.counterparty_phone,
-            initiator_name=current_user.full_name or current_user.phone_number,
+        await email_service.send_agreement_invite(
+            to_email=body.counterparty_email,
+            to_name=body.counterparty_email,
+            initiator_name=initiator_name,
             agreement_title=body.title,
             amount=_format_amount(body.amount),
             currency_symbol="₦",
+            terms=body.terms,
             repayment_date=body.repayment_date.strftime("%d %b %Y"),
             confirm_url=confirm_url,
         )
     except Exception:
-        pass  # notification failure must not block agreement creation
+        pass
+
+    # Confirm to initiator — best effort
+    try:
+        await email_service.send_creation_confirmation(
+            to_email=current_user.email,
+            to_name=initiator_name,
+            agreement_title=body.title,
+            counterparty_email=body.counterparty_email,
+        )
+    except Exception:
+        pass
 
     return _build_agreement_response(row)
 
@@ -133,7 +161,6 @@ async def create_agreement(
 async def list_agreements(
     current_user: UserProfile = Depends(get_current_user),
 ):
-    # Agreements where user is initiator
     as_initiator = (
         supabase.table("agreements")
         .select("*")
@@ -142,7 +169,6 @@ async def list_agreements(
         .execute()
     )
 
-    # Agreements where user is counterparty
     as_counterparty = (
         supabase.table("agreements")
         .select("*")
@@ -159,10 +185,18 @@ async def list_agreements(
             seen.add(row["id"])
             rows.append(_enrich_agreement(row))
 
-    # Re-sort merged list
     rows.sort(key=lambda r: r["created_at"], reverse=True)
 
-    return [_build_agreement_response(r) for r in rows]
+    result = []
+    for row in rows:
+        is_initiator = row["initiator_id"] == current_user.id
+        if is_initiator:
+            other_party_name = row.get("counterparty_name") or row.get("counterparty_email")
+        else:
+            other_party_name = row.get("initiator_name") or row.get("initiator_email")
+        result.append(_build_agreement_response(row, other_party_name=other_party_name))
+
+    return result
 
 
 # ── GET /agreements/{id} ──────────────────────────────────────────────────────
@@ -191,7 +225,187 @@ async def get_agreement(
             detail="You are not a party to this agreement.",
         )
 
-    return _build_agreement_response(_enrich_agreement(row))
+    row = _enrich_agreement(row)
+    is_initiator = row["initiator_id"] == current_user.id
+    other_party_name = (
+        row.get("counterparty_name") or row.get("counterparty_email")
+        if is_initiator
+        else row.get("initiator_name") or row.get("initiator_email")
+    )
+    return _build_agreement_response(row, other_party_name=other_party_name)
+
+
+# ── GET /agreements/{id}/pdf ──────────────────────────────────────────────────
+
+@router.get("/{agreement_id}/pdf")
+async def download_agreement_pdf(
+    agreement_id: str,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Generate and stream a PDF of the sealed agreement."""
+    result = (
+        supabase.table("agreements")
+        .select("*")
+        .eq("id", agreement_id)
+        .single()
+        .execute()
+    )
+
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
+
+    row = result.data
+
+    if row["initiator_id"] != current_user.id and row.get("counterparty_id") != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a party to this agreement.",
+        )
+
+    initiator = _get_profile_by_id(row["initiator_id"])
+    counterparty = (
+        _get_profile_by_id(row["counterparty_id"]) if row.get("counterparty_id") else None
+    )
+
+    payments_result = (
+        supabase.table("payments")
+        .select("*")
+        .eq("agreement_id", agreement_id)
+        .order("logged_at", desc=False)
+        .execute()
+    )
+    payments = payments_result.data or []
+
+    total_paid = sum(
+        float(p["amount"]) for p in payments if p.get("confirmed_by_receiver")
+    )
+
+    # Build HTML for PDF
+    payment_rows = "".join(
+        f"""<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
+            {p.get('logged_at', '')[:10]}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
+            ₦{float(p['amount']):,.2f}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
+            {'Confirmed' if p.get('confirmed_by_receiver') else 'Pending'}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
+            {p.get('note') or '—'}
+          </td>
+        </tr>"""
+        for p in payments
+    )
+
+    payments_section = f"""
+    <h3 style="font-size:13px;color:#374151;margin:24px 0 8px;">Payment History</h3>
+    <table width="100%" style="border-collapse:collapse;border:1px solid #E5E7EB;border-radius:6px;">
+      <thead>
+        <tr style="background:#F3F4F6;">
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Date</th>
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Amount</th>
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Status</th>
+          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Note</th>
+        </tr>
+      </thead>
+      <tbody>{payment_rows}</tbody>
+    </table>
+    <p style="font-size:12px;color:#374151;margin-top:8px;">
+      Total confirmed: <strong>₦{total_paid:,.2f}</strong>
+    </p>
+    """ if payments else ""
+
+    seal_section = ""
+    if row.get("seal_hash"):
+        seal_section = f"""
+        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:12px;margin-top:20px;">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#065F46;text-transform:uppercase;letter-spacing:0.05em;">
+            Agreement Fingerprint
+          </p>
+          <p style="margin:0;font-size:11px;font-family:monospace;color:#111827;word-break:break-all;">
+            {row['seal_hash']}
+          </p>
+          <p style="margin:4px 0 0;font-size:10px;color:#6B7280;">
+            Sealed at: {str(row.get('sealed_at', ''))[:19]} UTC
+          </p>
+        </div>
+        """
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 32px; color: #111827; }}
+    h1 {{ font-size: 20px; color: #1B4332; margin: 0 0 4px; }}
+    h2 {{ font-size: 14px; color: #374151; margin: 20px 0 8px; }}
+    .label {{ font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }}
+    .value {{ font-size: 14px; color: #111827; margin: 2px 0 12px; }}
+    .header {{ border-bottom: 2px solid #1B4332; padding-bottom: 12px; margin-bottom: 20px; }}
+    .meta {{ font-size: 11px; color: #9CA3AF; }}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Settle — Agreement Record</h1>
+    <p class="meta">Generated: {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')}</p>
+  </div>
+
+  <p class="label">Agreement Title</p>
+  <p class="value"><strong>{row['title']}</strong></p>
+
+  <p class="label">Amount</p>
+  <p class="value">₦{float(row['amount']):,.2f}</p>
+
+  <p class="label">Status</p>
+  <p class="value">{row['status'].capitalize()}</p>
+
+  <p class="label">Repayment Date</p>
+  <p class="value">{str(row['repayment_date'])[:10]}</p>
+
+  <p class="label">Terms</p>
+  <p class="value" style="white-space:pre-wrap;">{row['terms']}</p>
+
+  <h2>Parties</h2>
+  <p class="label">Initiator</p>
+  <p class="value">
+    {initiator.get('full_name') or ''} &lt;{initiator.get('email', '')}&gt;
+  </p>
+
+  <p class="label">Counterparty</p>
+  <p class="value">
+    {counterparty.get('full_name') or '' if counterparty else ''} &lt;{counterparty.get('email', '') if counterparty else row.get('counterparty_email', '')}&gt;
+  </p>
+
+  {payments_section}
+  {seal_section}
+</body>
+</html>"""
+
+    pdf_path = await pdf_service.generate_agreement_pdf(
+        html_content=html_content,
+        filename=f"settle-{agreement_id[:8]}",
+    )
+
+    def iter_file():
+        try:
+            with open(pdf_path, "rb") as f:
+                yield from f
+        finally:
+            try:
+                os.remove(pdf_path)
+            except OSError:
+                pass
+
+    return StreamingResponse(
+        iter_file(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="settle-agreement-{agreement_id[:8]}.pdf"'
+        },
+    )
 
 
 # ── POST /agreements/{id}/confirm ─────────────────────────────────────────────
@@ -226,10 +440,9 @@ async def confirm_agreement(
         if datetime.now(timezone.utc) > expires_at:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Confirmation link has expired.")
 
-    # 3. Verify current user is the counterparty
+    # 3. Verify current user is the counterparty (by email or id)
     if agreement.get("counterparty_id") != current_user.id:
-        # Counterparty may not have an account yet — match by phone
-        if agreement.get("counterparty_phone") != current_user.phone_number:
+        if agreement.get("counterparty_email") != current_user.email:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only the counterparty can confirm this agreement.",
@@ -247,7 +460,7 @@ async def confirm_agreement(
             detail=f"Agreement is already {agreement['status']}.",
         )
 
-    # 5. Fetch initiator profile for seal
+    # 5. Fetch initiator profile
     initiator = _get_profile_by_id(agreement["initiator_id"])
     if not initiator:
         raise HTTPException(
@@ -258,15 +471,13 @@ async def confirm_agreement(
     # 6. Seal the agreement
     seal = seal_agreement(
         agreement=agreement,
-        initiator_phone=initiator["phone_number"],
-        counterparty_phone=current_user.phone_number,
+        initiator_email=initiator["email"],
+        counterparty_email=current_user.email,
     )
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # 7. Atomically log confirmation + seal agreement via a Postgres function.
-    #    Both writes happen inside a single DB transaction — if either fails,
-    #    Postgres rolls back automatically. No manual cleanup needed.
+    # 7. Atomically log confirmation + seal via Postgres function
     try:
         supabase.rpc(
             "seal_agreement_confirm",
@@ -284,7 +495,7 @@ async def confirm_agreement(
             detail=f"Failed to seal agreement: {str(exc)}",
         )
 
-    # Fetch the freshly sealed row to build the response
+    # 8. Fetch sealed row
     sealed_result = (
         supabase.table("agreements")
         .select("*")
@@ -299,37 +510,55 @@ async def confirm_agreement(
         )
 
     sealed_row = sealed_result.data
-    sealed_row["initiator_phone"] = initiator["phone_number"]
+    sealed_row["initiator_email"] = initiator["email"]
     sealed_row["initiator_name"] = initiator.get("full_name")
     sealed_row["counterparty_name"] = current_user.full_name
 
-    record_url = f"{settings.PRODUCTION_FRONTEND_URL}/agreements/{agreement_id}"
+    record_url = f"{settings.FRONTEND_URL}/agreements/{agreement_id}"
     amount_str = _format_amount(float(agreement["amount"]))
-
-    # 8. Notify both parties — best effort
     sealed_at_str = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+
+    # 9. Generate PDF for attachment
+    pdf_bytes = b""
     try:
-        await whatsapp_service.send_sealed_confirmation(
-            phone=initiator["phone_number"],
-            party_name=initiator.get("full_name") or initiator["phone_number"],
+        pdf_path = await pdf_service.generate_agreement_pdf(
+            html_content=f"<html><body><h1>{agreement['title']}</h1></body></html>",
+            filename=f"settle-{agreement_id[:8]}",
+        )
+        with open(pdf_path, "rb") as f:
+            pdf_bytes = f.read()
+        os.remove(pdf_path)
+    except Exception:
+        pass  # PDF failure must not block sealing
+
+    # 10. Email both parties — best effort
+    initiator_name = initiator.get("full_name") or initiator["email"]
+    counterparty_name = current_user.full_name or current_user.email
+
+    try:
+        await email_service.send_sealed_confirmation(
+            to_email=initiator["email"],
+            to_name=initiator_name,
             agreement_title=agreement["title"],
             amount=amount_str,
             currency_symbol="₦",
             sealed_at=sealed_at_str,
             record_url=record_url,
+            pdf_bytes=pdf_bytes,
         )
     except Exception:
         pass
 
     try:
-        await whatsapp_service.send_sealed_confirmation(
-            phone=current_user.phone_number,
-            party_name=current_user.full_name or current_user.phone_number,
+        await email_service.send_sealed_confirmation(
+            to_email=current_user.email,
+            to_name=counterparty_name,
             agreement_title=agreement["title"],
             amount=amount_str,
             currency_symbol="₦",
             sealed_at=sealed_at_str,
             record_url=record_url,
+            pdf_bytes=pdf_bytes,
         )
     except Exception:
         pass
@@ -347,11 +576,7 @@ async def resend_invite(
     agreement_id: str,
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """
-    Resend the confirmation invite to the counterparty.
-    Only the initiator can call this.
-    Issues a fresh token with a new 72-hour expiry.
-    """
+    """Resend the confirmation invite. Only the initiator can call this."""
     result = (
         supabase.table("agreements")
         .select("*")
@@ -365,21 +590,18 @@ async def resend_invite(
 
     agreement = result.data
 
-    # Only the initiator can resend
     if agreement["initiator_id"] != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the initiator can resend the invite.",
         )
 
-    # Only makes sense for pending agreements
     if agreement["status"] != "pending":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot resend invite for a {agreement['status']} agreement.",
         )
 
-    # Issue a fresh token
     new_token = secrets.token_urlsafe(32)
     new_expires_at = datetime.now(timezone.utc) + timedelta(hours=72)
 
@@ -399,17 +621,19 @@ async def resend_invite(
             detail="Failed to refresh confirmation token.",
         )
 
-    confirm_url = f"{settings.PRODUCTION_FRONTEND_URL}/agreements/confirm/{new_token}"
+    confirm_url = f"{settings.FRONTEND_URL}/agreements/confirm/{new_token}"
+    initiator_name = current_user.full_name or current_user.email
 
-    # Notify counterparty — best effort
     try:
-        await whatsapp_service.send_agreement_invite(
-            counterparty_phone=agreement["counterparty_phone"],
-            initiator_name=current_user.full_name or current_user.phone_number,
+        await email_service.send_agreement_invite(
+            to_email=agreement["counterparty_email"],
+            to_name=agreement["counterparty_email"],
+            initiator_name=initiator_name,
             agreement_title=agreement["title"],
             amount=_format_amount(float(agreement["amount"])),
             currency_symbol="₦",
-            repayment_date=agreement["repayment_date"],
+            terms=agreement["terms"],
+            repayment_date=str(agreement["repayment_date"]),
             confirm_url=confirm_url,
         )
     except Exception:
@@ -425,8 +649,6 @@ async def get_agreement_by_token(token: str):
     """
     Public endpoint — no auth required.
     Returns a preview of the agreement for the confirmation page.
-    Returns 410 Gone if the token has expired.
-    Returns 409 Conflict if already confirmed.
     """
     result = (
         supabase.table("agreements")
@@ -441,14 +663,12 @@ async def get_agreement_by_token(token: str):
 
     agreement = result.data
 
-    # Already confirmed
     if agreement["status"] != "pending":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Agreement is already {agreement['status']}.",
         )
 
-    # Token expired
     expires_at_raw = agreement.get("token_expires_at")
     if expires_at_raw:
         expires_at = datetime.fromisoformat(expires_at_raw.replace("Z", "+00:00"))
@@ -460,7 +680,6 @@ async def get_agreement_by_token(token: str):
                 headers={"X-Initiator-Name": initiator.get("full_name", "") if initiator else ""},
             )
 
-    # Return preview (no sensitive seal data)
     initiator = _get_profile_by_id(agreement["initiator_id"])
 
     return {
@@ -470,5 +689,5 @@ async def get_agreement_by_token(token: str):
         "terms": agreement["terms"],
         "repayment_date": agreement["repayment_date"],
         "initiator_name": initiator.get("full_name") if initiator else None,
-        "initiator_phone": initiator.get("phone_number") if initiator else None,
+        "initiator_email": initiator.get("email") if initiator else None,
     }

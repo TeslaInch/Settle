@@ -52,7 +52,7 @@ export default function DashboardPage() {
 
   const owesMe = agreements.filter((a) => a.initiator_id === userId);
   const iOwe = agreements.filter(
-    (a) => a.counterparty_id === userId || a.counterparty_phone === user?.phone_number
+    (a) => a.counterparty_id === userId || a.counterparty_email === user?.email
   );
 
   const current = tab === "owe-me" ? owesMe : iOwe;

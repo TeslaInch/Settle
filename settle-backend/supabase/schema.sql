@@ -1,6 +1,6 @@
 -- ============================================================
 -- SETTLE APP — SUPABASE DATABASE SCHEMA
--- Run this in the Supabase SQL editor
+-- Run this in the Supabase SQL editor (full reset)
 -- ============================================================
 
 
@@ -9,12 +9,11 @@
 -- ============================================================
 CREATE TABLE profiles (
     id          uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    phone_number text UNIQUE NOT NULL,
+    email       text UNIQUE NOT NULL,
     full_name   text,
     created_at  timestamptz DEFAULT now()
 );
 
--- RLS: profiles
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own profile"
@@ -41,7 +40,7 @@ CREATE TABLE agreements (
     terms                text NOT NULL,
     initiator_id         uuid NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
     counterparty_id      uuid REFERENCES profiles(id) ON DELETE RESTRICT,
-    counterparty_phone   text NOT NULL,
+    counterparty_email   text NOT NULL,
     repayment_date       date NOT NULL,
     status               text NOT NULL DEFAULT 'pending'
                              CHECK (status IN ('pending', 'active', 'completed', 'overdue', 'cancelled')),
@@ -53,7 +52,6 @@ CREATE TABLE agreements (
     created_at           timestamptz DEFAULT now()
 );
 
--- RLS: agreements
 ALTER TABLE agreements ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Initiator can view own agreements"
@@ -72,11 +70,11 @@ CREATE POLICY "Initiator can update own agreements"
     ON agreements FOR UPDATE
     USING (auth.uid() = initiator_id);
 
--- Indexes: agreements
 CREATE INDEX idx_agreements_initiator_id       ON agreements(initiator_id);
 CREATE INDEX idx_agreements_counterparty_id    ON agreements(counterparty_id);
 CREATE INDEX idx_agreements_status             ON agreements(status);
 CREATE INDEX idx_agreements_confirmation_token ON agreements(confirmation_token);
+CREATE INDEX idx_agreements_counterparty_email ON agreements(counterparty_email);
 
 
 -- ============================================================
@@ -86,11 +84,9 @@ CREATE TABLE confirmations (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     agreement_id  uuid NOT NULL REFERENCES agreements(id) ON DELETE CASCADE,
     user_id       uuid NOT NULL REFERENCES profiles(id) ON DELETE RESTRICT,
-    confirmed_at  timestamptz DEFAULT now(),
-    ip_address    text
+    confirmed_at  timestamptz DEFAULT now()
 );
 
--- RLS: confirmations
 ALTER TABLE confirmations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Initiator can view confirmations on their agreements"
@@ -132,7 +128,6 @@ CREATE TABLE payments (
     confirmed_at            timestamptz
 );
 
--- RLS: payments
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Initiator can view payments on their agreements"
@@ -169,7 +164,6 @@ CREATE POLICY "Parties can update payment confirmation"
         )
     );
 
--- Indexes: payments
 CREATE INDEX idx_payments_agreement_id ON payments(agreement_id);
 
 
@@ -181,12 +175,11 @@ CREATE TABLE notifications (
     user_id       uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     agreement_id  uuid REFERENCES agreements(id) ON DELETE SET NULL,
     type          text NOT NULL,
-    channel       text NOT NULL,
+    channel       text NOT NULL DEFAULT 'email',
     status        text NOT NULL DEFAULT 'sent',
     sent_at       timestamptz DEFAULT now()
 );
 
--- RLS: notifications
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own notifications"
@@ -197,7 +190,6 @@ CREATE POLICY "Service can insert notifications"
     ON notifications FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
--- Indexes: notifications
 CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 
 
@@ -210,11 +202,12 @@ LANGUAGE plpgsql
 SECURITY DEFINER SET search_path = public
 AS $$
 BEGIN
-    INSERT INTO public.profiles (id, phone_number)
+    INSERT INTO public.profiles (id, email)
     VALUES (
         NEW.id,
-        COALESCE(NEW.phone, NEW.raw_user_meta_data->>'phone_number')
-    );
+        COALESCE(NEW.email, NEW.raw_user_meta_data->>'email')
+    )
+    ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
 $$;
@@ -228,8 +221,6 @@ CREATE TRIGGER on_auth_user_created
 -- FUNCTION: seal_agreement_confirm
 -- Atomically logs the counterparty confirmation and seals the
 -- agreement in a single transaction. Called via supabase.rpc().
--- SECURITY DEFINER runs as the function owner (service role),
--- so it can write to both tables regardless of RLS.
 -- ============================================================
 CREATE OR REPLACE FUNCTION public.seal_agreement_confirm(
     p_agreement_id  uuid,
@@ -244,11 +235,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-    -- Log counterparty confirmation
     INSERT INTO confirmations (agreement_id, user_id)
     VALUES (p_agreement_id, p_user_id);
 
-    -- Seal the agreement
     UPDATE agreements
     SET
         status             = 'active',
@@ -260,7 +249,6 @@ BEGIN
         token_expires_at   = NULL
     WHERE id = p_agreement_id;
 
-    -- Guard: if the UPDATE matched nothing, something is wrong — abort
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Agreement % not found during seal', p_agreement_id;
     END IF;

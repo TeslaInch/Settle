@@ -2,16 +2,17 @@
 
 import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { verifyOTP, sendOTP } from "@/lib/api";
+import { verifyCode, sendCode } from "@/lib/api";
 
 function VerifyForm() {
   const router = useRouter();
   const params = useSearchParams();
 
-  const phone = params.get("phone") ?? "";
+  const email = params.get("email") ?? "";
   const redirect = params.get("redirect") ?? "/dashboard";
 
-  const last4 = phone.slice(-4);
+  // Show last part of email for display
+  const emailDisplay = email.length > 24 ? `${email.slice(0, 12)}…${email.slice(email.lastIndexOf("@"))}` : email;
 
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const [fullName, setFullName] = useState("");
@@ -60,8 +61,8 @@ function VerifyForm() {
     setCanResend(false);
     setCountdown(60);
     setError("");
-    await sendOTP(phone);
-  }, [canResend, phone]);
+    await sendCode(email);
+  }, [canResend, email]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,7 +80,7 @@ function VerifyForm() {
     }
 
     setLoading(true);
-    const res = await verifyOTP(phone, code, fullName.trim() || undefined);
+    const res = await verifyCode(email, code, fullName.trim() || undefined);
     setLoading(false);
 
     if (res.status === 422 || res.error?.includes("full_name")) {
@@ -97,6 +98,16 @@ function VerifyForm() {
 
     if (res.data?.access_token) {
       localStorage.setItem("settle_token", res.data.access_token);
+
+      // Fetch user profile and save to localStorage
+      const meRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL ?? ""}/api/v1/auth/me`,
+        { headers: { Authorization: `Bearer ${res.data.access_token}` } }
+      );
+      if (meRes.ok) {
+        const user = await meRes.json();
+        localStorage.setItem("settle_user", JSON.stringify(user));
+      }
     }
 
     router.push(redirect);
@@ -119,8 +130,8 @@ function VerifyForm() {
           Enter your code
         </h1>
         <p className="text-[15px] text-gray-500 leading-relaxed mb-8">
-          We sent a 6-digit code to the number ending in{" "}
-          <strong className="text-gray-900">••••{last4}</strong>
+          We sent a 6-digit code to{" "}
+          <strong className="text-gray-900">{emailDisplay}</strong>
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
@@ -157,7 +168,7 @@ function VerifyForm() {
                 onChange={(e) => handleOtpChange(i, e.target.value)}
                 onKeyDown={(e) => handleOtpKeyDown(i, e)}
                 disabled={loading}
-                aria-label={`OTP digit ${i + 1}`}
+                aria-label={`Code digit ${i + 1}`}
                 className={[
                   "flex-1 min-w-0 h-14 rounded-[10px] border text-center text-[22px] font-semibold text-gray-900 bg-white outline-none transition-colors",
                   error ? "border-red-500" : digit ? "border-[#1B4332]" : "border-gray-300",

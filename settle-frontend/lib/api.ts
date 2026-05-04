@@ -8,12 +8,11 @@ export interface ApiResponse<T> {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
-export interface SendOTPResponse {
+export interface SendCodeResponse {
   message: string;
-  phone_number: string;
 }
 
-export interface VerifyOTPResponse {
+export interface VerifyCodeResponse {
   access_token: string;
   token_type: string;
   is_new_user: boolean;
@@ -28,7 +27,7 @@ export interface Agreement {
   terms: string;
   initiator_id: string;
   counterparty_id: string | null;
-  counterparty_phone: string;
+  counterparty_email: string;
   repayment_date: string;
   status: "pending" | "active" | "completed" | "overdue" | "cancelled";
   seal_hash: string | null;
@@ -41,7 +40,7 @@ export interface CreateAgreementPayload {
   title: string;
   amount: number;
   terms: string;
-  counterparty_phone: string;
+  counterparty_email: string;
   repayment_date: string;
 }
 
@@ -104,23 +103,23 @@ async function apiRequest<T>(
 
 // ── Auth endpoints ────────────────────────────────────────────────────────────
 
-export async function sendOTP(
-  phone_number: string
-): Promise<ApiResponse<SendOTPResponse>> {
-  return apiRequest<SendOTPResponse>("/api/v1/auth/send-otp", {
+export async function sendCode(
+  email: string
+): Promise<ApiResponse<SendCodeResponse>> {
+  return apiRequest<SendCodeResponse>("/api/v1/auth/send-code", {
     method: "POST",
-    body: JSON.stringify({ phone_number }),
+    body: JSON.stringify({ email }),
   });
 }
 
-export async function verifyOTP(
-  phone_number: string,
-  otp_code: string,
+export async function verifyCode(
+  email: string,
+  code: string,
   full_name?: string
-): Promise<ApiResponse<VerifyOTPResponse>> {
-  return apiRequest<VerifyOTPResponse>("/api/v1/auth/verify-otp", {
+): Promise<ApiResponse<VerifyCodeResponse>> {
+  return apiRequest<VerifyCodeResponse>("/api/v1/auth/verify-code", {
     method: "POST",
-    body: JSON.stringify({ phone_number, otp_code, full_name }),
+    body: JSON.stringify({ email, code, full_name }),
   });
 }
 

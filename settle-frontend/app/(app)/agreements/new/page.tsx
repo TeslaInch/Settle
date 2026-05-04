@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { createAgreement } from "@/lib/api";
 import {
-  validateNigerianPhone,
+  validateEmail,
   validateAmount,
   validateFutureDate,
   validateTerms,
@@ -16,7 +16,7 @@ interface FormState {
   title: string;
   amount: string;
   terms: string;
-  counterparty_phone: string;
+  counterparty_email: string;
   repayment_date: string;
 }
 
@@ -24,7 +24,7 @@ interface FormErrors {
   title?: string;
   amount?: string;
   terms?: string;
-  counterparty_phone?: string;
+  counterparty_email?: string;
   repayment_date?: string;
 }
 
@@ -35,7 +35,7 @@ export default function NewAgreementPage() {
     title: "",
     amount: "",
     terms: "",
-    counterparty_phone: "",
+    counterparty_email: "",
     repayment_date: "",
   });
 
@@ -43,9 +43,10 @@ export default function NewAgreementPage() {
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
-  const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const set = (field: keyof FormState) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
-    // Clear field error on change
     setErrors((prev) => ({ ...prev, [field]: undefined }));
   };
 
@@ -57,8 +58,8 @@ export default function NewAgreementPage() {
     if (amountErr) errs.amount = amountErr;
     const termsErr = validateTerms(form.terms);
     if (termsErr) errs.terms = termsErr;
-    const phoneErr = validateNigerianPhone(form.counterparty_phone);
-    if (phoneErr) errs.counterparty_phone = phoneErr;
+    const emailErr = validateEmail(form.counterparty_email);
+    if (emailErr) errs.counterparty_email = emailErr;
     const dateErr = validateFutureDate(form.repayment_date);
     if (dateErr) errs.repayment_date = dateErr;
 
@@ -78,7 +79,7 @@ export default function NewAgreementPage() {
       title: form.title.trim(),
       amount: parseFloat(form.amount),
       terms: form.terms.trim(),
-      counterparty_phone: form.counterparty_phone.trim(),
+      counterparty_email: form.counterparty_email.trim(),
       repayment_date: new Date(form.repayment_date).toISOString(),
     });
 
@@ -99,9 +100,7 @@ export default function NewAgreementPage() {
       return;
     }
 
-    // Mark first agreement created for install prompt
     markFirstAgreementCreated();
-
     router.push("/dashboard");
   };
 
@@ -154,23 +153,24 @@ export default function NewAgreementPage() {
           {errors.amount && <p className="mt-1 text-xs text-red-500">{errors.amount}</p>}
         </div>
 
-        {/* Counterparty phone */}
+        {/* Counterparty email */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Other party&apos;s phone number
+            Other party&apos;s email address
           </label>
           <input
-            type="tel"
-            inputMode="tel"
-            value={form.counterparty_phone}
-            onChange={set("counterparty_phone")}
-            placeholder="08012345678"
+            type="email"
+            inputMode="email"
+            autoComplete="off"
+            value={form.counterparty_email}
+            onChange={set("counterparty_email")}
+            placeholder="them@example.com"
             className={`w-full rounded-xl border px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-green-500 ${
-              errors.counterparty_phone ? "border-red-400" : "border-gray-200"
+              errors.counterparty_email ? "border-red-400" : "border-gray-200"
             }`}
           />
-          {errors.counterparty_phone && (
-            <p className="mt-1 text-xs text-red-500">{errors.counterparty_phone}</p>
+          {errors.counterparty_email && (
+            <p className="mt-1 text-xs text-red-500">{errors.counterparty_email}</p>
           )}
         </div>
 
@@ -218,7 +218,6 @@ export default function NewAgreementPage() {
           </div>
         </div>
 
-        {/* API error */}
         {apiError && (
           <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
             <p className="text-sm text-red-600">{apiError}</p>

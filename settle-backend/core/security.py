@@ -24,12 +24,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 def verify_token(token: str) -> dict:
-    """
-    Decode and validate a JWT.
-    Raises HTTPException 401 on any failure.
-    """
+    """Decode and validate a JWT. Raises 401 on any failure."""
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        payload = jwt.decode(
+            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+        )
         return payload
     except JWTError:
         raise HTTPException(
@@ -44,7 +43,7 @@ async def get_current_user(
 ) -> UserProfile:
     """
     FastAPI dependency — validates Bearer token and returns the user's profile.
-    Raises 401 if token is invalid or user profile is not found.
+    Raises 401 if token is invalid or profile is not found.
     """
     payload = verify_token(credentials.credentials)
 
@@ -58,7 +57,7 @@ async def get_current_user(
 
     result = (
         supabase.table("profiles")
-        .select("id, phone_number, full_name")
+        .select("id, email, full_name")
         .eq("id", user_id)
         .single()
         .execute()

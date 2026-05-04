@@ -18,7 +18,7 @@ pydantic[email]
 httpx==0.26.0
 
 # PDF generation
-weasyprint==60.0
+reportlab==4.2.5
 
 # Scheduler
 apscheduler==3.10.4

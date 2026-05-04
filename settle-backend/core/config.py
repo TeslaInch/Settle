@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Supabase
     SUPABASE_URL: str
     SUPABASE_SERVICE_KEY: str
+    SUPABASE_ANON_KEY: str
 
     # Email — Resend
     RESEND_API_KEY: str

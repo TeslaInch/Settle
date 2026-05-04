@@ -1,4 +1,3 @@
-#import neededfiles and make sure logic works as expected
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -6,8 +5,8 @@ from datetime import datetime, timezone
 
 def seal_agreement(
     agreement: dict,
-    initiator_phone: str,
-    counterparty_phone: str,
+    initiator_email: str,
+    counterparty_email: str,
 ) -> dict:
     """
     Pure function — builds a deterministic seal payload and SHA256 hash.
@@ -21,11 +20,11 @@ def seal_agreement(
     """
     payload = {
         "title":              agreement["title"],
-        "amount":             str(agreement["amount"]),   # str for float stability
+        "amount":             str(agreement["amount"]),
         "terms":              agreement["terms"],
         "repayment_date":     str(agreement["repayment_date"]),
-        "initiator_phone":    initiator_phone,
-        "counterparty_phone": counterparty_phone,
+        "initiator_email":    initiator_email,
+        "counterparty_email": counterparty_email,
         "sealed_at":          datetime.now(timezone.utc).isoformat(),
     }
 

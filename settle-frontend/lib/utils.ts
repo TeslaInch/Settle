@@ -60,13 +60,11 @@ export function markFirstAgreementCreated(): void {
 
 // ── Form validation ───────────────────────────────────────────────────────────
 
-export function validateNigerianPhone(value: string): string | null {
-  const v = value.trim().replace(/\s|-/g, "");
-  const valid =
-    (v.startsWith("+234") && v.length === 14 && /^\d+$/.test(v.slice(4))) ||
-    (v.startsWith("234") && v.length === 13 && /^\d+$/.test(v.slice(3))) ||
-    (v.startsWith("0") && v.length === 11 && /^\d+$/.test(v.slice(1)));
-  return valid ? null : "Enter a valid Nigerian phone number (e.g. 08012345678)";
+export function validateEmail(value: string): string | null {
+  const v = value.trim();
+  if (!v) return "Email is required.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "Enter a valid email address.";
+  return null;
 }
 
 export function validateAmount(value: string): string | null {

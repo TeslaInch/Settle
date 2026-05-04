@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, Any
 
 from pydantic import BaseModel, EmailStr, Field
@@ -35,7 +35,7 @@ class AgreementCreate(BaseModel):
     amount: float = Field(..., gt=0)
     terms: str = Field(..., min_length=1)
     counterparty_email: EmailStr
-    repayment_date: datetime
+    repayment_date: date
 
 
 class AgreementResponse(BaseModel):
@@ -51,7 +51,7 @@ class AgreementResponse(BaseModel):
     counterparty_email: str
     counterparty_name: Optional[str] = None
     other_party_name: Optional[str] = None
-    repayment_date: datetime
+    repayment_date: date
     seal_hash: Optional[str] = None
     seal_payload: Optional[Any] = None
     sealed_at: Optional[datetime] = None
