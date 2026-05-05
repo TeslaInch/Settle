@@ -119,13 +119,13 @@ export default function AgreementDetailPage() {
   const isInitiator = agreement.initiator_id === userId;
   const { label, overdue } = getDaysRelative(agreement.repayment_date);
   const otherParty = isInitiator
-    ? (agreement as Agreement & { counterparty_name?: string }).counterparty_name ?? agreement.counterparty_phone
-    : (agreement as Agreement & { initiator_name?: string }).initiator_name ?? agreement.counterparty_phone;
+    ? (agreement as Agreement & { counterparty_name?: string }).counterparty_name ?? agreement.counterparty_email
+    : (agreement as Agreement & { initiator_name?: string }).initiator_name ?? agreement.counterparty_email;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       {/* Header */}
-      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
+      <div className="bg-white px-4 md:px-6 lg:px-8 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back">
             <ArrowLeft size={22} className="text-gray-700" />
@@ -137,7 +137,7 @@ export default function AgreementDetailPage() {
         </div>
       </div>
 
-      <div className="px-4 py-5 space-y-4">
+      <div className="max-w-2xl mx-auto px-4 md:px-6 lg:px-8 py-5 space-y-4">
         {/* Summary */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
           <div className="flex items-center justify-between">

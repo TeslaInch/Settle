@@ -23,10 +23,14 @@ export default function PaymentsPage() {
   const { agreementId } = useParams<{ agreementId: string }>();
   const router = useRouter();
 
-  const rawUser =
-    typeof window !== "undefined" ? localStorage.getItem("settle_user") : null;
-  const user = rawUser ? JSON.parse(rawUser) : null;
-  const userId: string = user?.id ?? "";
+  // Read userId in useEffect to avoid server/client hydration mismatch
+  const [userId, setUserId] = useState("");
+
+  useEffect(() => {
+    const rawUser = localStorage.getItem("settle_user");
+    const parsed = rawUser ? JSON.parse(rawUser) : null;
+    setUserId(parsed?.id ?? "");
+  }, []);
 
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -71,7 +75,10 @@ export default function PaymentsPage() {
     ? Math.min(100, Math.round((totalPaid / agreement.amount) * 100))
     : 0;
 
-  const isReceiver = agreement?.counterparty_id === userId;
+  // initiator = person who is OWED money = receiver of payments (confirms receipt)
+  // counterparty = person who OWES money = payer (logs payments)
+  const isReceiver = agreement?.initiator_id === userId;
+  const isPayer = agreement?.counterparty_id === userId;
 
   // Open sheet pre-filled with remaining
   const openLogSheet = () => {
@@ -137,7 +144,7 @@ export default function PaymentsPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
       {/* Top bar */}
-      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
+      <div className="bg-white px-4 md:px-6 lg:px-8 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back">
             <ArrowLeft size={22} className="text-gray-700" />
@@ -149,7 +156,7 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      <div className="px-4 py-5 space-y-5">
+      <div className="max-w-2xl mx-auto px-4 md:px-6 lg:px-8 py-5 space-y-5">
         {/* Summary card */}
         <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-3">
           <div className="flex justify-between text-sm text-gray-500">
@@ -204,17 +211,19 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      {/* Log payment button */}
-      <div className="fixed bottom-0 left-0 right-0 flex justify-center bg-white border-t border-gray-100">
-        <div className="w-full max-w-[640px] px-4 py-4">
-          <button
-            onClick={openLogSheet}
-            className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-semibold text-white active:scale-[0.98] transition-transform"
-          >
-            Log New Payment
-          </button>
+      {/* Log payment button — only visible to the payer (counterparty) on active agreements */}
+      {isPayer && agreement.status === "active" && (
+        <div className="fixed bottom-0 left-0 right-0 flex justify-center bg-white border-t border-gray-100">
+          <div className="w-full max-w-2xl px-4 md:px-6 lg:px-8 py-4">
+            <button
+              onClick={openLogSheet}
+              className="w-full rounded-2xl bg-green-600 py-3.5 text-sm font-semibold text-white active:scale-[0.98] transition-transform"
+            >
+              Log New Payment
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Log payment bottom sheet */}
       <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title="Log a Payment">

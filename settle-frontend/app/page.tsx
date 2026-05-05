@@ -21,8 +21,8 @@ function PhoneMockup() {
         <circle cx="148" cy="50" r="10" fill="#2D6A4F" />
         <text x="144" y="54" fontFamily="system-ui" fontSize="10" fill="white">✓</text>
         <rect x="16" y="80" width="148" height="90" rx="10" fill="white" />
-        <text x="28" y="100" fontFamily="system-ui" fontSize="10" fontWeight="600" fill="#111827">Rent Loan — Emeka</text>
-        <text x="28" y="120" fontFamily="system-ui" fontSize="18" fontWeight="700" fill="#1B4332">₦150,000</text>
+        <text x="28" y="100" fontFamily="system-ui" fontSize="10" fontWeight="600" fill="#111827">Deposit — Alex</text>
+        <text x="28" y="120" fontFamily="system-ui" fontSize="18" fontWeight="700" fill="#1B4332">$2,500.00</text>
         <rect x="28" y="130" width="44" height="16" rx="8" fill="#D1FAE5" />
         <text x="36" y="142" fontFamily="system-ui" fontSize="8" fontWeight="600" fill="#065F46">Active</text>
         <text x="28" y="162" fontFamily="system-ui" fontSize="9" fill="#6B7280">Due: 30 Jun 2025 · 14 days left</text>
@@ -95,13 +95,13 @@ export default function LandingPage() {
             </h1>
             <p className="text-base sm:text-lg text-gray-500 leading-relaxed mb-8 max-w-md mx-auto md:mx-0">
               Settle witnesses your informal agreements. Both parties confirm.
-              The record is sealed forever.
+              The record is sealed and sent to your email — forever.
             </p>
             <Link
               href="/login"
               className="inline-block bg-[#1B4332] text-white text-base font-bold px-6 py-4 rounded-2xl leading-tight hover:bg-[#14532d] transition-colors"
             >
-              Create Your First Agreement — It&apos;s Free
+              Create Your First Agreement
             </Link>
           </div>
           {/* Mockup */}
@@ -116,18 +116,18 @@ export default function LandingPage() {
         <div className="flex flex-col gap-4 md:grid md:grid-cols-3">
           <Step
             number="1"
-            title="You describe the agreement"
-            body="Enter the amount, terms, and repayment date. Takes under a minute."
+            title="Describe the agreement"
+            body="Set the amount, terms, and repayment date. Takes under a minute."
           />
           <Step
             number="2"
-            title="The other person confirms"
-            body="They get a WhatsApp link. They tap agree. No app download needed."
+            title="Both parties confirm"
+            body="The other person gets an email with the full terms. They review and confirm with one tap."
           />
           <Step
             number="3"
-            title="It's sealed forever"
-            body="Both parties get a permanent timestamped record on WhatsApp. Immutable."
+            title="Sealed forever"
+            body="Both parties receive a permanent timestamped record by email. Download it as a PDF anytime."
           />
         </div>
       </section>
@@ -137,13 +137,13 @@ export default function LandingPage() {
         <div className="max-w-5xl mx-auto">
           <p className="text-xs font-semibold uppercase tracking-widest text-[#1B4332] mb-2">Who it&apos;s for</p>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-900 mb-8">
-            Built for everyday Nigerians
+            Built for anyone who makes informal agreements
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <UseCard emoji="🤝" text="Lending money to a friend or family" />
-            <UseCard emoji="🛒" text="Trader giving goods on credit" />
-            <UseCard emoji="🏠" text="Collecting rent in installments" />
-            <UseCard emoji="📋" text="Any agreement you need witnessed" />
+            <UseCard emoji="💼" text="Freelancers collecting deposits for work" />
+            <UseCard emoji="🏠" text="Landlords and rent installments" />
+            <UseCard emoji="📋" text="Any agreement that needs a witness" />
           </div>
         </div>
       </section>
@@ -158,7 +158,7 @@ export default function LandingPage() {
           <p className="text-base text-emerald-200 leading-relaxed mb-8">
             The moment both parties confirm, Settle seals the agreement with a
             unique fingerprint. Any attempt to alter it is detectable. Your
-            WhatsApp receipt is your proof.
+            email receipt is your proof.
           </p>
           <div className="bg-white/10 rounded-2xl p-5 text-left">
             <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300 mb-2">
@@ -178,19 +178,21 @@ export default function LandingPage() {
           <h2 className="text-3xl sm:text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
             Start for free.
           </h2>
-          <p className="text-base text-gray-500 mb-8">No bank account needed.</p>
+          <p className="text-base text-gray-500 mb-8">
+            No bank account needed. Works anywhere in the world.
+          </p>
           <Link
             href="/login"
             className="inline-block bg-[#1B4332] text-white text-base font-bold px-10 py-4 rounded-2xl hover:bg-[#14532d] transition-colors"
           >
-            Get Started
+            Create Your First Agreement
           </Link>
         </div>
       </section>
 
       {/* ── Footer ── */}
       <footer className="px-5 py-5 border-t border-gray-100 text-center">
-        <p className="text-sm text-gray-400">Settle — Built for Nigeria</p>
+        <p className="text-sm text-gray-400">Settle — Your agreements, witnessed and sealed.</p>
       </footer>
 
     </div>

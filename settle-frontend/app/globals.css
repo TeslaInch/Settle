@@ -14,14 +14,6 @@
 }
 
 @layer utilities {
-  /* Centered app shell — used by the authenticated app pages */
-  .app-shell {
-    width: 100%;
-    max-width: 640px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
   /* Wider container for landing page sections */
   .landing-container {
     width: 100%;

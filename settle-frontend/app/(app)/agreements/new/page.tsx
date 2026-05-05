@@ -107,7 +107,7 @@ export default function NewAgreementPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       {/* Header */}
-      <div className="bg-white px-4 pt-12 md:pt-6 pb-4 shadow-sm">
+      <div className="bg-white px-4 md:px-6 lg:px-8 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => router.back()} aria-label="Back">
             <ArrowLeft size={22} className="text-gray-700" />
@@ -116,7 +116,7 @@ export default function NewAgreementPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} noValidate className="px-4 py-5 space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="max-w-2xl mx-auto px-4 md:px-6 lg:px-8 py-5 space-y-4">
         {/* Title */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">

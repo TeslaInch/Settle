@@ -1,6 +1,5 @@
+import io
 import secrets
-import tempfile
-import os
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -56,10 +55,10 @@ def _get_profile_by_id(user_id: str) -> dict | None:
         supabase.table("profiles")
         .select("id, email, full_name")
         .eq("id", user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-    return result.data
+    return result.data if result else None
 
 
 def _get_profile_by_email(email: str) -> dict | None:
@@ -210,11 +209,11 @@ async def get_agreement(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not result.data:
+    if not result or not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     row = result.data
@@ -242,168 +241,81 @@ async def download_agreement_pdf(
     agreement_id: str,
     current_user: UserProfile = Depends(get_current_user),
 ):
-    """Generate and stream a PDF of the sealed agreement."""
-    result = (
+    """Generate and stream a PDF of the agreement using ReportLab."""
+    # Fetch agreement
+    ag_result = (
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-
-    if not result.data:
+    if not ag_result or not ag_result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
-    row = result.data
+    agreement = ag_result.data
 
-    if row["initiator_id"] != current_user.id and row.get("counterparty_id") != current_user.id:
+    # Verify user is a party
+    if (
+        agreement["initiator_id"] != current_user.id
+        and agreement.get("counterparty_id") != current_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not a party to this agreement.",
         )
 
-    initiator = _get_profile_by_id(row["initiator_id"])
-    counterparty = (
-        _get_profile_by_id(row["counterparty_id"]) if row.get("counterparty_id") else None
+    # Fetch initiator profile
+    initiator_result = (
+        supabase.table("profiles")
+        .select("id, email, full_name")
+        .eq("id", agreement["initiator_id"])
+        .maybe_single()
+        .execute()
     )
+    initiator = initiator_result.data or {}
 
-    payments_result = (
+    # Fetch counterparty profile (may not exist yet)
+    counterparty: dict = {}
+    if agreement.get("counterparty_id"):
+        cp_result = (
+            supabase.table("profiles")
+            .select("id, email, full_name")
+            .eq("id", agreement["counterparty_id"])
+            .maybe_single()
+            .execute()
+        )
+        counterparty = cp_result.data or {}
+
+    # Fetch payments
+    pm_result = (
         supabase.table("payments")
         .select("*")
         .eq("agreement_id", agreement_id)
-        .order("logged_at", desc=False)
+        .order("logged_at")
         .execute()
     )
-    payments = payments_result.data or []
+    payments = pm_result.data or []
 
-    total_paid = sum(
-        float(p["amount"]) for p in payments if p.get("confirmed_by_receiver")
-    )
-
-    # Build HTML for PDF
-    payment_rows = "".join(
-        f"""<tr>
-          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
-            {p.get('logged_at', '')[:10]}
-          </td>
-          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
-            ₦{float(p['amount']):,.2f}
-          </td>
-          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
-            {'Confirmed' if p.get('confirmed_by_receiver') else 'Pending'}
-          </td>
-          <td style="padding:6px 8px;border-bottom:1px solid #E5E7EB;font-size:12px;">
-            {p.get('note') or '—'}
-          </td>
-        </tr>"""
-        for p in payments
-    )
-
-    payments_section = f"""
-    <h3 style="font-size:13px;color:#374151;margin:24px 0 8px;">Payment History</h3>
-    <table width="100%" style="border-collapse:collapse;border:1px solid #E5E7EB;border-radius:6px;">
-      <thead>
-        <tr style="background:#F3F4F6;">
-          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Date</th>
-          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Amount</th>
-          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Status</th>
-          <th style="padding:6px 8px;text-align:left;font-size:11px;color:#6B7280;">Note</th>
-        </tr>
-      </thead>
-      <tbody>{payment_rows}</tbody>
-    </table>
-    <p style="font-size:12px;color:#374151;margin-top:8px;">
-      Total confirmed: <strong>₦{total_paid:,.2f}</strong>
-    </p>
-    """ if payments else ""
-
-    seal_section = ""
-    if row.get("seal_hash"):
-        seal_section = f"""
-        <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:12px;margin-top:20px;">
-          <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#065F46;text-transform:uppercase;letter-spacing:0.05em;">
-            Agreement Fingerprint
-          </p>
-          <p style="margin:0;font-size:11px;font-family:monospace;color:#111827;word-break:break-all;">
-            {row['seal_hash']}
-          </p>
-          <p style="margin:4px 0 0;font-size:10px;color:#6B7280;">
-            Sealed at: {str(row.get('sealed_at', ''))[:19]} UTC
-          </p>
-        </div>
-        """
-
-    html_content = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <style>
-    body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0; padding: 32px; color: #111827; }}
-    h1 {{ font-size: 20px; color: #1B4332; margin: 0 0 4px; }}
-    h2 {{ font-size: 14px; color: #374151; margin: 20px 0 8px; }}
-    .label {{ font-size: 11px; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; }}
-    .value {{ font-size: 14px; color: #111827; margin: 2px 0 12px; }}
-    .header {{ border-bottom: 2px solid #1B4332; padding-bottom: 12px; margin-bottom: 20px; }}
-    .meta {{ font-size: 11px; color: #9CA3AF; }}
-  </style>
-</head>
-<body>
-  <div class="header">
-    <h1>Settle — Agreement Record</h1>
-    <p class="meta">Generated: {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M UTC')}</p>
-  </div>
-
-  <p class="label">Agreement Title</p>
-  <p class="value"><strong>{row['title']}</strong></p>
-
-  <p class="label">Amount</p>
-  <p class="value">₦{float(row['amount']):,.2f}</p>
-
-  <p class="label">Status</p>
-  <p class="value">{row['status'].capitalize()}</p>
-
-  <p class="label">Repayment Date</p>
-  <p class="value">{str(row['repayment_date'])[:10]}</p>
-
-  <p class="label">Terms</p>
-  <p class="value" style="white-space:pre-wrap;">{row['terms']}</p>
-
-  <h2>Parties</h2>
-  <p class="label">Initiator</p>
-  <p class="value">
-    {initiator.get('full_name') or ''} &lt;{initiator.get('email', '')}&gt;
-  </p>
-
-  <p class="label">Counterparty</p>
-  <p class="value">
-    {counterparty.get('full_name') or '' if counterparty else ''} &lt;{counterparty.get('email', '') if counterparty else row.get('counterparty_email', '')}&gt;
-  </p>
-
-  {payments_section}
-  {seal_section}
-</body>
-</html>"""
-
-    pdf_path = await pdf_service.generate_agreement_pdf(
-        html_content=html_content,
-        filename=f"settle-{agreement_id[:8]}",
-    )
-
-    def iter_file():
-        try:
-            with open(pdf_path, "rb") as f:
-                yield from f
-        finally:
-            try:
-                os.remove(pdf_path)
-            except OSError:
-                pass
+    # Generate PDF bytes
+    try:
+        pdf_bytes = await pdf_service.generate_agreement_pdf(
+            agreement=agreement,
+            initiator=initiator,
+            counterparty=counterparty,
+            payments=payments,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate PDF: {str(e)}",
+        )
 
     return StreamingResponse(
-        iter_file(),
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="settle-agreement-{agreement_id[:8]}.pdf"'
+            "Content-Disposition": f'attachment; filename="settle-{agreement_id[:8]}.pdf"'
         },
     )
 
@@ -421,11 +333,11 @@ async def confirm_agreement(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not result.data:
+    if not result or not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     agreement = result.data
@@ -500,10 +412,10 @@ async def confirm_agreement(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-    if not sealed_result.data:
+    if not sealed_result or not sealed_result.data:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Agreement sealed but could not be retrieved.",
@@ -521,13 +433,16 @@ async def confirm_agreement(
     # 9. Generate PDF for attachment
     pdf_bytes = b""
     try:
-        pdf_path = await pdf_service.generate_agreement_pdf(
-            html_content=f"<html><body><h1>{agreement['title']}</h1></body></html>",
-            filename=f"settle-{agreement_id[:8]}",
+        pdf_bytes = await pdf_service.generate_agreement_pdf(
+            agreement=agreement,
+            initiator=initiator,
+            counterparty={
+                "id": current_user.id,
+                "email": current_user.email,
+                "full_name": current_user.full_name,
+            },
+            payments=[],
         )
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
-        os.remove(pdf_path)
     except Exception:
         pass  # PDF failure must not block sealing
 
@@ -581,11 +496,11 @@ async def resend_invite(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not result.data:
+    if not result or not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     agreement = result.data
@@ -654,12 +569,15 @@ async def get_agreement_by_token(token: str):
         supabase.table("agreements")
         .select("*")
         .eq("confirmation_token", token)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not result.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
+    if not result or not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This confirmation link is invalid or has expired.",
+        )
 
     agreement = result.data
 

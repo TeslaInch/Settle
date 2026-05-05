@@ -9,14 +9,15 @@ function VerifyForm() {
   const params = useSearchParams();
 
   const email = params.get("email") ?? "";
+  const nameFromQuery = params.get("name") ?? "";
   const redirect = params.get("redirect") ?? "/dashboard";
 
-  // Show last part of email for display
-  const emailDisplay = email.length > 24 ? `${email.slice(0, 12)}…${email.slice(email.lastIndexOf("@"))}` : email;
+  const emailDisplay =
+    email.length > 24
+      ? `${email.slice(0, 12)}…${email.slice(email.lastIndexOf("@"))}`
+      : email;
 
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
-  const [fullName, setFullName] = useState("");
-  const [showNameField, setShowNameField] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [countdown, setCountdown] = useState(60);
@@ -74,18 +75,18 @@ function VerifyForm() {
       return;
     }
 
-    if (showNameField && !fullName.trim()) {
-      setError("Please enter your full name.");
-      return;
-    }
-
     setLoading(true);
-    const res = await verifyCode(email, code, fullName.trim() || undefined);
+    // Pass name from query params — empty string for returning users, which
+    // the backend treats as "no name provided" and skips profile creation.
+    const res = await verifyCode(email, code, nameFromQuery || undefined);
     setLoading(false);
 
-    if (res.status === 422 || res.error?.includes("full_name")) {
-      setShowNameField(true);
-      setError("Please enter your full name to complete sign-up.");
+    // Backend says name is required — user is new but didn't enter a name.
+    // Send them back to login with an explanatory message.
+    if (res.status === 422 || res.error?.toLowerCase().includes("full_name")) {
+      router.push(
+        `/login?error=${encodeURIComponent("Please enter your name to sign up.")}&email=${encodeURIComponent(email)}`
+      );
       return;
     }
 
@@ -114,8 +115,8 @@ function VerifyForm() {
   }
 
   return (
-    <main className="min-h-dvh bg-gray-50 flex items-center justify-center px-5 py-6">
-      <div className="w-full max-w-sm flex flex-col">
+    <main className="min-h-dvh bg-gray-50 flex items-center justify-center px-5 py-6 lg:py-12">
+      <div className="w-full max-w-sm md:max-w-md lg:max-w-lg flex flex-col">
         {/* Logo */}
         <div className="flex items-center gap-2.5 mb-10">
           <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -135,26 +136,6 @@ function VerifyForm() {
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          {/* Full name — shown when backend signals new user */}
-          {showNameField && (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="full-name" className="text-sm font-medium text-gray-700">
-                Full name
-              </label>
-              <input
-                id="full-name"
-                type="text"
-                autoComplete="name"
-                placeholder="Ada Okonkwo"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                disabled={loading}
-                autoFocus
-                className="h-[52px] rounded-[10px] border border-gray-300 px-4 text-base text-gray-900 bg-white outline-none focus:border-[#1B4332] focus:ring-2 focus:ring-[#1B4332]/20 transition-colors w-full disabled:opacity-60"
-              />
-            </div>
-          )}
-
           {/* OTP boxes */}
           <div className="flex gap-2.5 justify-between" onPaste={handleOtpPaste}>
             {otp.map((digit, i) => (

@@ -52,7 +52,7 @@ export default function RootLayout({
         <meta name="msapplication-TileColor" content="#1B4332" />
         <meta name="msapplication-tap-highlight" content="no" />
       </head>
-      <body>{children}</body>
+      <body className="w-full">{children}</body>
     </html>
   );
 }

@@ -35,10 +35,10 @@ def _get_profile_by_id(user_id: str) -> dict | None:
         supabase.table("profiles")
         .select("id, email, full_name")
         .eq("id", user_id)
-        .single()
+        .maybe_single()
         .execute()
     )
-    return result.data
+    return result.data if result else None
 
 
 def _format_amount(amount: float) -> str:
@@ -56,11 +56,11 @@ async def list_payments(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not ag_result.data:
+    if not ag_result or not ag_result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     agreement = ag_result.data
@@ -98,11 +98,11 @@ async def log_payment(
         supabase.table("agreements")
         .select("*")
         .eq("id", agreement_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not ag_result.data:
+    if not ag_result or not ag_result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     agreement = ag_result.data
@@ -198,11 +198,11 @@ async def confirm_payment(
         supabase.table("payments")
         .select("*")
         .eq("id", payment_id)
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not pm_result.data:
+    if not pm_result or not pm_result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found.")
 
     payment = pm_result.data
@@ -211,11 +211,11 @@ async def confirm_payment(
         supabase.table("agreements")
         .select("*")
         .eq("id", payment["agreement_id"])
-        .single()
+        .maybe_single()
         .execute()
     )
 
-    if not ag_result.data:
+    if not ag_result or not ag_result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
 
     agreement = ag_result.data
