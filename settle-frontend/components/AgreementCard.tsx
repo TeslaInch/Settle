@@ -15,7 +15,7 @@ export default function AgreementCard({ agreement, currentUserId }: Props) {
   const { label, overdue } = getDaysRelative(agreement.repayment_date);
 
   const otherParty =
-    agreement.other_party_name ?? agreement.counterparty_phone;
+    agreement.other_party_name ?? agreement.counterparty_email;
 
   return (
     <button
