@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Home, Plus, FileText } from "lucide-react";
+import { Home, Plus } from "lucide-react";
 
 export default function BottomNav() {
   const router = useRouter();
@@ -17,11 +17,6 @@ export default function BottomNav() {
       label: "New",
       icon: Plus,
       path: "/agreements/new",
-    },
-    {
-      label: "Agreements",
-      icon: FileText,
-      path: "/agreements",
     },
   ];
 

@@ -157,7 +157,7 @@ export default function PaymentsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-32">
+    <div className="min-h-screen bg-gray-50 pb-16 lg:pb-0">
       {/* Top bar */}
       <div className="bg-white px-4 md:px-6 lg:px-8 pt-12 md:pt-6 pb-4 shadow-sm">
         <div className="flex items-center gap-3">

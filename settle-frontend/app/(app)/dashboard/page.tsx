@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, TrendingDown, TrendingUp, LayoutList } from "lucide-react";
+import { FileText, TrendingDown, TrendingUp, LayoutList } from "lucide-react";
 
 import { getAgreements, type Agreement } from "@/lib/api";
 import { getFirstName, getGreeting } from "@/lib/utils";
@@ -151,19 +151,6 @@ export default function DashboardPage() {
           <LayoutList size={48} strokeWidth={1.5} />
           <p className="text-base font-medium text-gray-500">Select an agreement to view details</p>
           <p className="text-sm text-gray-400">Choose one from the list on the left</p>
-        </div>
-      </div>
-
-      {/* FAB — mobile only */}
-      <div className="lg:hidden pointer-events-none fixed bottom-0 left-0 right-0 flex justify-center z-40">
-        <div className="relative w-full max-w-[640px]">
-          <button
-            onClick={() => router.push("/agreements/new")}
-            aria-label="Create new agreement"
-            className="pointer-events-auto absolute bottom-6 right-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-600 shadow-lg active:scale-95 transition-transform"
-          >
-            <Plus size={26} className="text-white" />
-          </button>
         </div>
       </div>
     </div>
