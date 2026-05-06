@@ -55,6 +55,20 @@ export interface Payment {
   logged_at: string;
   confirmed_by_receiver: boolean;
   confirmed_at: string | null;
+  disputed: boolean;
+  disputed_at: string | null;
+  dispute_reason: string | null;
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export interface Notification {
+  id: string;
+  agreement_id: string | null;
+  type: string;
+  message: string;
+  read: boolean;
+  sent_at: string;
 }
 
 export interface LogPaymentPayload {
@@ -186,10 +200,42 @@ export async function confirmPayment(
   });
 }
 
+export async function disputePayment(
+  paymentId: string,
+  reason: string
+): Promise<ApiResponse<Payment>> {
+  return apiRequest<Payment>(`/api/v1/payments/${paymentId}/dispute`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export async function resendInvite(
   agreementId: string
 ): Promise<ApiResponse<{ message: string; expires_in_hours: number }>> {
   return apiRequest(`/api/v1/agreements/${agreementId}/resend-invite`, {
+    method: "POST",
+  });
+}
+
+// ── Notification endpoints ────────────────────────────────────────────────────
+
+export async function getNotifications(): Promise<ApiResponse<Notification[]>> {
+  return apiRequest("/api/v1/notifications");
+}
+
+export async function getUnreadCount(): Promise<ApiResponse<{ count: number }>> {
+  return apiRequest("/api/v1/notifications/unread-count");
+}
+
+export async function markAsRead(id: string): Promise<ApiResponse<any>> {
+  return apiRequest(`/api/v1/notifications/${id}/read`, {
+    method: "POST",
+  });
+}
+
+export async function markAllRead(): Promise<ApiResponse<any>> {
+  return apiRequest("/api/v1/notifications/read-all", {
     method: "POST",
   });
 }

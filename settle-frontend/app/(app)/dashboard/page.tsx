@@ -9,6 +9,7 @@ import { getFirstName, getGreeting } from "@/lib/utils";
 import AgreementCard from "@/components/AgreementCard";
 import EmptyState from "@/components/EmptyState";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import NotificationBell from "@/components/NotificationBell";
 
 type Tab = "owe-me" | "i-owe";
 
@@ -74,18 +75,11 @@ export default function DashboardPage() {
               <p className="text-xs text-gray-400 uppercase tracking-wide">Settle</p>
               <h1 className="text-xl font-bold text-gray-900 mt-0.5">{greeting}</h1>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               {refreshing && (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-green-600 border-t-transparent" />
               )}
-              {/* New Agreement button — desktop only */}
-              <button
-                onClick={() => router.push("/agreements/new")}
-                className="hidden lg:flex items-center gap-1.5 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white active:scale-[0.98] transition-transform"
-              >
-                <Plus size={16} />
-                New Agreement
-              </button>
+              <NotificationBell />
             </div>
           </div>
 

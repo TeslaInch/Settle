@@ -74,6 +74,10 @@ class PaymentLogRequest(BaseModel):
     note: Optional[str] = None
 
 
+class DisputeRequest(BaseModel):
+    reason: str = Field(..., min_length=10, max_length=500)
+
+
 class PaymentResponse(BaseModel):
     id: str
     agreement_id: str
@@ -83,6 +87,9 @@ class PaymentResponse(BaseModel):
     logged_at: datetime
     confirmed_by_receiver: bool
     confirmed_at: Optional[datetime] = None
+    disputed: bool = False
+    disputed_at: Optional[datetime] = None
+    dispute_reason: Optional[str] = None
 
 
 # ── Notifications ─────────────────────────────────────────────────────────────

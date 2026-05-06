@@ -6,6 +6,7 @@ import { ArrowLeft, Download, Receipt } from "lucide-react";
 
 import {
   confirmPayment,
+  disputePayment,
   downloadAgreementPDF,
   getAgreement,
   getPayments,
@@ -46,6 +47,9 @@ export default function PaymentsPage() {
 
   // Confirm state
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
+  // Dispute state
+  const [disputingId, setDisputingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +122,17 @@ export default function PaymentsPage() {
     await confirmPayment(paymentId);
     setConfirmingId(null);
     load();
+  };
+
+  const handleDispute = async (paymentId: string, reason: string) => {
+    setDisputingId(paymentId);
+    const res = await disputePayment(paymentId, reason);
+    setDisputingId(null);
+    if (res.error) {
+      setError(res.error);
+    } else {
+      load();
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -203,7 +218,9 @@ export default function PaymentsPage() {
                   payment={p}
                   isReceiver={isReceiver}
                   onConfirm={handleConfirm}
+                  onDispute={handleDispute}
                   confirming={confirmingId === p.id}
+                  disputing={disputingId === p.id}
                 />
               ))
             )}

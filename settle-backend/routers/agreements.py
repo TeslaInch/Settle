@@ -17,6 +17,7 @@ from models.schemas import (
 )
 from services.email import email_service
 from services.pdf import pdf_service
+from services.notify import notify_service
 from utils.agreement_lock import seal_agreement
 
 router = APIRouter(prefix="/agreements", tags=["agreements"])
@@ -150,6 +151,14 @@ async def create_agreement(
         )
     except Exception:
         pass
+
+    # Create notification for initiator
+    notify_service.create(
+        user_id=current_user.id,
+        agreement_id=row["id"],
+        type="agreement_created",
+        message=f"Your agreement '{body.title}' has been sent to {body.counterparty_email}"
+    )
 
     return _build_agreement_response(row)
 
@@ -477,6 +486,27 @@ async def confirm_agreement(
         )
     except Exception:
         pass
+
+    # Create notifications for both parties
+    title = agreement["title"]
+    agreement_id = agreement["id"]
+    initiator_id = agreement["initiator_id"]
+
+    # Notify initiator
+    notify_service.create(
+        user_id=initiator_id,
+        agreement_id=agreement_id,
+        type="agreement_sealed",
+        message=f"'{title}' has been confirmed and sealed by both parties"
+    )
+
+    # Notify counterparty
+    notify_service.create(
+        user_id=current_user.id,
+        agreement_id=agreement_id,
+        type="agreement_sealed",
+        message=f"You confirmed '{title}'. The agreement is now sealed."
+    )
 
     return ConfirmResponse(
         message="Agreement sealed successfully.",

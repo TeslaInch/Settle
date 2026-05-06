@@ -262,6 +262,34 @@ class EmailService:
             html=_base_html(body),
         )
 
+    async def send_payment_disputed(
+        self,
+        to_email: str,
+        to_name: str,
+        receiver_name: str,
+        amount: str,
+        currency_symbol: str,
+        agreement_title: str,
+        reason: str,
+        agreement_url: str,
+    ) -> bool:
+        body = "".join([
+            _p(f"Hi {to_name},"),
+            _p(
+                f"<strong>{receiver_name}</strong> has disputed your logged "
+                f"payment of <strong>{currency_symbol}{amount}</strong> for "
+                f"<strong>'{agreement_title}'</strong>."
+            ),
+            _p(f"<strong>Reason:</strong> {reason}"),
+            _p("Please contact them to resolve this."),
+            _button("View Agreement", agreement_url),
+        ])
+        return self._send(
+            to=to_email,
+            subject=f"Payment disputed — {agreement_title}",
+            html=_base_html(body),
+        )
+
     async def send_payment_reminder(
         self,
         to_email: str,

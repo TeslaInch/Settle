@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from core.database import supabase
 from core.security import get_current_user
 from core.config import settings
-from models.schemas import PaymentLogRequest, PaymentResponse, UserProfile
+from models.schemas import PaymentLogRequest, PaymentResponse, UserProfile, DisputeRequest
 from services.email import email_service
+from services.notify import notify_service
 
 router = APIRouter()
 
@@ -27,6 +28,9 @@ def _build_payment_response(row: dict) -> PaymentResponse:
         logged_at=row["logged_at"],
         confirmed_by_receiver=row["confirmed_by_receiver"],
         confirmed_at=row.get("confirmed_at"),
+        disputed=row.get("disputed", False),
+        disputed_at=row.get("disputed_at"),
+        dispute_reason=row.get("dispute_reason"),
     )
 
 
@@ -181,6 +185,14 @@ async def log_payment(
                     agreement_title=agreement["title"],
                     confirm_url=confirm_url,
                 )
+
+                # Create in-app notification for receiver
+                notify_service.create(
+                    user_id=receiver_id,
+                    agreement_id=agreement_id,
+                    type="payment_logged",
+                    message=f"{payer_name} logged a payment of ₦{_format_amount(body.amount)} on '{agreement['title']}'. Please confirm or dispute."
+                )
     except Exception:
         pass
 
@@ -261,13 +273,22 @@ async def confirm_payment(
         payer = _get_profile_by_id(payment["payer_id"])
         if payer:
             receiver_name = current_user.full_name or current_user.email
+            amount_str = _format_amount(float(payment["amount"]))
             await email_service.send_payment_confirmed(
                 to_email=payer["email"],
                 to_name=payer.get("full_name") or payer["email"],
                 receiver_name=receiver_name,
-                amount=_format_amount(float(payment["amount"])),
+                amount=amount_str,
                 currency_symbol="₦",
                 agreement_title=agreement["title"],
+            )
+
+            # Create in-app notification for payer
+            notify_service.create(
+                user_id=payment["payer_id"],
+                agreement_id=payment["agreement_id"],
+                type="payment_confirmed",
+                message=f"Your payment of ₦{amount_str} was confirmed by {receiver_name}"
             )
     except Exception:
         pass
@@ -318,3 +339,116 @@ async def confirm_payment(
         pass
 
     return _build_payment_response(confirmed_payment)
+
+
+# ── POST /payments/{id}/dispute ─────────────────────────────────────────────────
+
+@router.post("/payments/{payment_id}/dispute", response_model=PaymentResponse)
+async def dispute_payment(
+    payment_id: str,
+    body: DisputeRequest,
+    current_user: UserProfile = Depends(get_current_user),
+):
+    pm_result = (
+        supabase.table("payments")
+        .select("*")
+        .eq("id", payment_id)
+        .maybe_single()
+        .execute()
+    )
+
+    if not pm_result or not pm_result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Payment not found.")
+
+    payment = pm_result.data
+
+    ag_result = (
+        supabase.table("agreements")
+        .select("*")
+        .eq("id", payment["agreement_id"])
+        .maybe_single()
+        .execute()
+    )
+
+    if not ag_result or not ag_result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agreement not found.")
+
+    agreement = ag_result.data
+
+    if not _is_party_to_agreement(agreement, current_user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a party to this agreement.",
+        )
+
+    # Verify current user is the receiver (not the payer)
+    if payment["payer_id"] == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot dispute your own payment.",
+        )
+
+    # Verify payment is not already confirmed
+    if payment["confirmed_by_receiver"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot dispute a confirmed payment.",
+        )
+
+    # Verify payment is not already disputed
+    if payment.get("disputed", False):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This payment has already been disputed.",
+        )
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    update_result = (
+        supabase.table("payments")
+        .update({
+            "disputed": True,
+            "disputed_at": now_iso,
+            "dispute_reason": body.reason,
+        })
+        .eq("id", payment_id)
+        .execute()
+    )
+
+    if not update_result.data:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dispute payment.",
+        )
+
+    disputed_payment = update_result.data[0]
+
+    # Notify payer — best effort
+    try:
+        payer = _get_profile_by_id(payment["payer_id"])
+        if payer:
+            receiver_name = current_user.full_name or current_user.email
+            amount_str = _format_amount(float(payment["amount"]))
+            agreement_url = f"{settings.FRONTEND_URL}/agreements/{agreement['id']}"
+            await email_service.send_payment_disputed(
+                to_email=payer["email"],
+                to_name=payer.get("full_name") or payer["email"],
+                receiver_name=receiver_name,
+                amount=amount_str,
+                currency_symbol="₦",
+                agreement_title=agreement["title"],
+                reason=body.reason,
+                agreement_url=agreement_url,
+            )
+
+            # Create in-app notification for payer
+            notify_service.create(
+                user_id=payment["payer_id"],
+                agreement_id=payment["agreement_id"],
+                type="payment_disputed",
+                message=f"{receiver_name} disputed your payment of ₦{amount_str}. Reason: {body.reason}"
+            )
+    except Exception:
+        pass
+
+    return _build_payment_response(disputed_payment)
