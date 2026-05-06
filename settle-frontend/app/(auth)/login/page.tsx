@@ -65,8 +65,15 @@ function LoginForm() {
         <div className="flex items-center gap-2.5 mb-10">
           <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
             <rect width="32" height="32" rx="8" fill="#1B4332" />
-            <path d="M10 22l6-12 6 12" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M12.5 18h7" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+            <text
+              x="16"
+              y="22"
+              textAnchor="middle"
+              fill="white"
+              fontSize="20"
+              fontWeight="bold"
+              fontFamily="Helvetica, Arial, sans-serif"
+            >S</text>
           </svg>
           <span className="text-[22px] font-bold text-[#1B4332] tracking-tight">Settle</span>
         </div>
