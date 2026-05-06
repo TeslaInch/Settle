@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
 from core.config import settings
 from routers import auth, agreements, payments, notifications, health
@@ -33,6 +34,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# CORS preflight handler (must be before routers)
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(
+    rest_of_path: str,
+    request: Request
+) -> Response:
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin":
+                request.headers.get("origin", "*"),
+            "Access-Control-Allow-Methods":
+                "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers":
+                "Authorization, Content-Type",
+            "Access-Control-Allow-Credentials": "true",
+        }
+    )
 
 # Routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
